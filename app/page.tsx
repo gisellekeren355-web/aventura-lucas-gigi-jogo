@@ -116,6 +116,12 @@ export default function Game() {
   const [arenaScoreLucas, setArenaScoreLucas] = useState(0);
   const [arenaAttacker, setArenaAttacker] = useState<"Giselle" | "Lucas" | "">("");
   const [arenaKeeper, setArenaKeeper] = useState<"Giselle" | "Lucas" | "">("");
+  const [arenaChoiceGigi, setArenaChoiceGigi] = useState<"Atacante" | "Goleiro" | "">("");
+  const [arenaChoiceLucas, setArenaChoiceLucas] = useState<"Atacante" | "Goleiro" | "">("");
+  const [arenaAttackerGoals, setArenaAttackerGoals] = useState(0);
+  const [arenaKeeperSaves, setArenaKeeperSaves] = useState(0);
+  const [arenaDefenseTarget, setArenaDefenseTarget] = useState<"Esquerda" | "Centro" | "Direita">("Centro");
+  const [arenaPhase, setArenaPhase] = useState<"roles" | "attack" | "defense" | "done">("roles");
   const [arenaShooter, setArenaShooter] = useState<"Giselle" | "Lucas">("Giselle");
   const [arenaTransferGigi, setArenaTransferGigi] = useState("");
   const [arenaTransferLucas, setArenaTransferLucas] = useState("");
@@ -453,35 +459,89 @@ export default function Game() {
 
   function chooseArenaRole(player: "Giselle" | "Lucas", role: "Atacante" | "Goleiro") {
     if (player === "Giselle") {
-      if (role === "Atacante") { setArenaAttacker("Giselle"); setArenaKeeper("Lucas"); }
-      else { setArenaAttacker("Lucas"); setArenaKeeper("Giselle"); }
+      setArenaChoiceGigi(role);
+      if (arenaChoiceLucas === role) setArenaChoiceLucas("");
     } else {
-      if (role === "Atacante") { setArenaAttacker("Lucas"); setArenaKeeper("Giselle"); }
-      else { setArenaAttacker("Giselle"); setArenaKeeper("Lucas"); }
+      setArenaChoiceLucas(role);
+      if (arenaChoiceGigi === role) setArenaChoiceGigi("");
     }
-    setArenaScoreGigi(0);
-    setArenaScoreLucas(0);
-    setArenaShotMessage("Posições definidas! Arraste a bola para começar o duelo.");
+    setArenaAttacker("");
+    setArenaKeeper("");
+    setArenaAttackerGoals(0);
+    setArenaKeeperSaves(0);
+    setArenaPhase("roles");
+    setArenaShotMessage("Escolham funções diferentes e confirmem as posições.");
     chime(620,.25);
   }
 
-  function kickArenaBall() {
-    if (!arenaAttacker || !arenaKeeper) {
-      setArenaShotMessage("Escolham primeiro quem será atacante e quem será goleiro.");
+  function confirmArenaRoles() {
+    if (!arenaChoiceGigi || !arenaChoiceLucas) {
+      setArenaShotMessage("Giselle e Lucas precisam escolher uma função.");
       chime(150,.2);
       return;
     }
-    const scored = Math.random() > 0.46;
+    if (arenaChoiceGigi === arenaChoiceLucas) {
+      setArenaShotMessage("As funções não podem ser iguais. Um deve atacar e o outro defender.");
+      chime(150,.2);
+      return;
+    }
+    const attacker = arenaChoiceGigi === "Atacante" ? "Giselle" : "Lucas";
+    const keeper = attacker === "Giselle" ? "Lucas" : "Giselle";
+    setArenaAttacker(attacker);
+    setArenaKeeper(keeper);
+    setArenaAttackerGoals(0);
+    setArenaKeeperSaves(0);
+    setArenaPhase("attack");
+    setArenaShotMessage(`${attacker} começa no ataque. Arraste a bola e marque 3 gols.`);
+    chime(720,.3);
+  }
+
+  function kickArenaBall() {
+    if (!arenaAttacker || !arenaKeeper || arenaPhase !== "attack") {
+      setArenaShotMessage("Definam as posições e iniciem primeiro a etapa de ataque.");
+      chime(150,.2);
+      return;
+    }
+    const scored = Math.random() > 0.42;
     if (scored) {
-      if (arenaAttacker === "Giselle") setArenaScoreGigi(v => Math.min(3, v + 1));
-      else setArenaScoreLucas(v => Math.min(3, v + 1));
-      setArenaShotMessage(`⚽ GOL de ${arenaAttacker}!`);
+      setArenaAttackerGoals(v => {
+        const next = Math.min(3, v + 1);
+        if (next >= 3) {
+          setArenaPhase("defense");
+          setArenaDefenseTarget(["Esquerda","Centro","Direita"][Math.floor(Math.random()*3)] as "Esquerda" | "Centro" | "Direita");
+          setArenaShotMessage(`${arenaAttacker} marcou 3 gols! Agora ${arenaKeeper} precisa defender 3 chutes.`);
+        } else {
+          setArenaShotMessage(`⚽ GOL de ${arenaAttacker}! Faltam ${3-next}.`);
+        }
+        return next;
+      });
       chime(820, .3);
     } else {
-      if (arenaKeeper === "Giselle") setArenaScoreGigi(v => Math.min(3, v + 1));
-      else setArenaScoreLucas(v => Math.min(3, v + 1));
-      setArenaShotMessage(`🧤 DEFESA de ${arenaKeeper}!`);
+      setArenaShotMessage(`🧤 O goleiro virtual defendeu. ${arenaAttacker} pode tentar novamente.`);
       chime(360, .3);
+    }
+  }
+
+  function defendArenaShot(direction: "Esquerda" | "Centro" | "Direita") {
+    if (arenaPhase !== "defense" || !arenaKeeper) return;
+    const saved = direction === arenaDefenseTarget;
+    if (saved) {
+      setArenaKeeperSaves(v => {
+        const next = Math.min(3, v + 1);
+        if (next >= 3) {
+          setArenaPhase("done");
+          setArenaShotMessage(`🧤 DEFESA de ${arenaKeeper}! As 3 defesas foram concluídas.`);
+        } else {
+          setArenaShotMessage(`🧤 ${arenaKeeper} defendeu no lado ${direction.toLowerCase()}! Faltam ${3-next}.`);
+          setArenaDefenseTarget(["Esquerda","Centro","Direita"][Math.floor(Math.random()*3)] as "Esquerda" | "Centro" | "Direita");
+        }
+        return next;
+      });
+      chime(760,.28);
+    } else {
+      setArenaShotMessage(`⚽ A bola foi para ${arenaDefenseTarget.toLowerCase()}. Tentem defender o próximo chute.`);
+      setArenaDefenseTarget(["Esquerda","Centro","Direita"][Math.floor(Math.random()*3)] as "Esquerda" | "Centro" | "Direita");
+      chime(220,.25);
     }
   }
 
@@ -497,7 +557,7 @@ export default function Game() {
   }
 
   function finishArena() {
-    if (!arenaTeamName.trim() || !arenaAttacker || !arenaKeeper || arenaScoreGigi < 3 || arenaScoreLucas < 3 || arenaGoals.length < 2 || !arenaTransferGigi || !arenaTransferLucas) {
+    if (!arenaTeamName.trim() || !arenaAttacker || !arenaKeeper || arenaAttackerGoals < 3 || arenaKeeperSaves < 3 || arenaGoals.length < 2 || !arenaTransferGigi || !arenaTransferLucas) {
       setArenaMessage("Concluam o nome da equipe, escolham atacante e goleiro, completem 3 gols e 3 defesas, façam as duas cobranças e escolham as transferências.");
       chime(160, .3); return;
     }
@@ -577,7 +637,13 @@ export default function Game() {
               <p>Duas almas. Mil histórias. Um destino: nós dois.</p>
               <button onClick={() => { setStarted(true); chime(520, .5); }} className="start-button"><span>✦</span> Iniciar Jornada <span>✦</span></button>
             </motion.div>
-            <motion.div className="anime-couple-frame" initial={{opacity:0,y:35}} animate={{opacity:1,y:0}} transition={{delay:1.1,duration:1}}><img src="/assets/couple-1.png" alt="Lucas e Gigi"/><div className="anime-glow"></div></motion.div>
+            <motion.div className="intro-art-collage" initial={{opacity:0,y:35}} animate={{opacity:1,y:0}} transition={{delay:1.05,duration:1}}>
+              <figure className="intro-card intro-card-main"><img src="/assets/intro-city-anime.jpg" alt="Lucas e Gigi em arte animada"/></figure>
+              <figure className="intro-card intro-card-brazil"><img src="/assets/intro-brazil-anime.jpg" alt="Lucas e Gigi com camisas do Brasil"/></figure>
+              <figure className="intro-card intro-card-beach"><img src="/assets/intro-beach-anime.png" alt="Lucas e Gigi na praia"/></figure>
+              <figure className="intro-card intro-card-funny"><img src="/assets/intro-funny-anime.png" alt="Lucas e Gigi em momento divertido"/></figure>
+              <div className="anime-glow"></div>
+            </motion.div>
             <div className="couple-silhouette"><span>14</span><span>02</span></div>
             <div className="dragon-float">🐉</div>
           </motion.section>
@@ -926,7 +992,19 @@ export default function Game() {
             <button className="close" onClick={()=>{setSelected(null);setArenaMessage("")}}>×</button><div className="scroll-title arena-title"><span>⚽</span><div><small>CAPÍTULO VII</small><h2>Arena do Futebol</h2><p>Quando dois jogam como um</p></div><span>🏆</span></div>
             <div className="story"><p>A nova moto conduz vocês até um estádio escondido entre montanhas. As arquibancadas estão vazias, mas tochas se acendem quando a dupla entra no gramado.</p><p>O Guardião da Arena anuncia: <em>“Talento individual marca gols. Confiança e parceria conquistam campeonatos.”</em></p></div>
             <section className="forest-section arena-section"><h3>1. Batizem a equipe</h3><input className="team-input" value={arenaTeamName} onChange={e=>setArenaTeamName(e.target.value)} placeholder="Nome da equipe de Lucas & Gigi"/></section>
-            <section className="forest-section arena-section"><h3>2. Duelo de Ataque e Defesa</h3><p>Escolham as posições. Um será o <b>atacante</b> e precisa marcar 3 gols. O outro será o <b>goleiro</b> e precisa defender 3 bolas. As funções não podem ser iguais.</p><div className="role-picker"><div><b>Giselle quer ser:</b><button className={arenaAttacker==="Giselle"?"selected-choice":""} onClick={()=>chooseArenaRole("Giselle","Atacante")}>⚽ Atacante</button><button className={arenaKeeper==="Giselle"?"selected-choice":""} onClick={()=>chooseArenaRole("Giselle","Goleiro")}>🧤 Goleira</button></div><div><b>Lucas quer ser:</b><button className={arenaAttacker==="Lucas"?"selected-choice":""} onClick={()=>chooseArenaRole("Lucas","Atacante")}>⚽ Atacante</button><button className={arenaKeeper==="Lucas"?"selected-choice":""} onClick={()=>chooseArenaRole("Lucas","Goleiro")}>🧤 Goleiro</button></div></div><div className="soccer-score"><span>Atacante: <b>{arenaAttacker || "—"}</b> {arenaAttacker==="Giselle"?arenaScoreGigi:arenaScoreLucas}/3 gols</span><span>Goleiro: <b>{arenaKeeper || "—"}</b> {arenaKeeper==="Giselle"?arenaScoreGigi:arenaScoreLucas}/3 defesas</span></div><div className="soccer-mini-game" ref={goalRef}><div className="goal-net"></div><div className="moving-keeper">🧤</div><motion.div className="soccer-ball" drag dragConstraints={goalRef} dragElastic={0.15} onDragEnd={kickArenaBall}>⚽</motion.div></div><p className="shot-message">{arenaShotMessage}</p></section>
+            <section className="forest-section arena-section"><h3>2. Duelo de Ataque e Defesa</h3>
+              <p>Escolham as posições. Um será o <b>atacante</b> e precisa marcar 3 gols. O outro será o <b>goleiro</b> e precisa defender 3 chutes. As funções não podem ser iguais.</p>
+              <div className="role-picker">
+                <div><b>Giselle quer ser:</b><button type="button" className={arenaChoiceGigi==="Atacante"?"selected-choice":""} onClick={()=>chooseArenaRole("Giselle","Atacante")}>⚽ Atacante</button><button type="button" disabled={arenaChoiceLucas==="Goleiro"} className={arenaChoiceGigi==="Goleiro"?"selected-choice":""} onClick={()=>chooseArenaRole("Giselle","Goleiro")}>🧤 Goleira</button></div>
+                <div><b>Lucas quer ser:</b><button type="button" disabled={arenaChoiceGigi==="Atacante"} className={arenaChoiceLucas==="Atacante"?"selected-choice":""} onClick={()=>chooseArenaRole("Lucas","Atacante")}>⚽ Atacante</button><button type="button" disabled={arenaChoiceGigi==="Goleiro"} className={arenaChoiceLucas==="Goleiro"?"selected-choice":""} onClick={()=>chooseArenaRole("Lucas","Goleiro")}>🧤 Goleiro</button></div>
+              </div>
+              <button type="button" className="confirm-roles" onClick={confirmArenaRoles}>Confirmar posições</button>
+              <div className="soccer-score"><span>Atacante: <b>{arenaAttacker || "—"}</b> {arenaAttackerGoals}/3 gols</span><span>Goleiro: <b>{arenaKeeper || "—"}</b> {arenaKeeperSaves}/3 defesas</span></div>
+              {arenaPhase === "attack" && <div className="soccer-mini-game" ref={goalRef}><div className="goal-net"></div><div className="moving-keeper">🧤</div><motion.div className="soccer-ball" drag dragConstraints={goalRef} dragElastic={0.15} onDragEnd={kickArenaBall}>⚽</motion.div></div>}
+              {arenaPhase === "defense" && <div className="keeper-mini-game"><div className={`incoming-ball target-${arenaDefenseTarget.toLowerCase()}`}>⚽</div><div className="defense-goal"><span>🥅</span></div><p>O chute está vindo. Escolha rapidamente para onde o goleiro deve saltar:</p><div className="defense-controls"><button type="button" onClick={()=>defendArenaShot("Esquerda")}>⬅️ Defender esquerda</button><button type="button" onClick={()=>defendArenaShot("Centro")}>⬆️ Defender centro</button><button type="button" onClick={()=>defendArenaShot("Direita")}>➡️ Defender direita</button></div></div>}
+              {arenaPhase === "done" && <div className="duel-complete">🏆 Ataque e defesa concluídos!</div>}
+              <p className="shot-message">{arenaShotMessage}</p>
+            </section>
             <section className="forest-section arena-section"><h3>3. Cobranças do Destino</h3><div className="bridge-rules"><p>1–2: defesa do goleiro; o jogador cumpre uma prenda.</p><p>3–4: gol com dificuldade.</p><p>5–6: golaço e bônus de torcida.</p></div><div className="pirate-dice-row"><button disabled={arenaGoals.length>=2} onClick={rollArenaGoal}>🎲 {arenaGoals.length===0?"Cobrança de Giselle":arenaGoals.length===1?"Cobrança de Lucas":"Cobranças concluídas"}</button><b>{arenaGoals.length?arenaGoals.join(" | "):"—"}</b></div></section>
             <section className="forest-section arena-section"><h3>4. Mercado de Transferências</h3><p>Depois da partida, os maiores clubes do reino enviam propostas. Cada jogador escolhe seu novo time.</p><ChoiceGroup title="Transferência de Giselle" value={arenaTransferGigi} setValue={setArenaTransferGigi} options={["Real Madrid","Barcelona","Atlético de Madrid","Santos"]}/><ChoiceGroup title="Transferência de Lucas" value={arenaTransferLucas} setValue={setArenaTransferLucas} options={["Real Madrid","Barcelona","Atlético de Madrid","Santos"]}/><button className="forest-finish" onClick={finishArena}>Encerrar a partida</button></section>
             {arenaMessage && <motion.div className={arenaMessage.startsWith("Vitória")?"result success":"result fail"} initial={{scale:.85,opacity:0}} animate={{scale:1,opacity:1}}><span>{arenaMessage}</span>{arenaMessage.startsWith("Vitória")&&<div className="memory-reveal"><p>Recompensa: Troféu da Sintonia.</p><button className="continue-button" onClick={()=>{setSelected(null);setArenaMessage("")}}>Seguir para o Castelo do Destino →</button></div>}</motion.div>}
