@@ -637,13 +637,6 @@ export default function Game() {
               <p>Duas almas. Mil histórias. Um destino: nós dois.</p>
               <button onClick={() => { setStarted(true); chime(520, .5); }} className="start-button"><span>✦</span> Iniciar Jornada <span>✦</span></button>
             </motion.div>
-            <motion.div className="intro-art-collage" initial={{opacity:0,y:35}} animate={{opacity:1,y:0}} transition={{delay:1.05,duration:1}}>
-              <figure className="intro-card intro-card-main"><img src="/assets/intro-city-anime.jpg" alt="Lucas e Gigi em arte animada"/></figure>
-              <figure className="intro-card intro-card-brazil"><img src="/assets/intro-brazil-anime.jpg" alt="Lucas e Gigi com camisas do Brasil"/></figure>
-              <figure className="intro-card intro-card-beach"><img src="/assets/intro-beach-anime.png" alt="Lucas e Gigi na praia"/></figure>
-              <figure className="intro-card intro-card-funny"><img src="/assets/intro-funny-anime.png" alt="Lucas e Gigi em momento divertido"/></figure>
-              <div className="anime-glow"></div>
-            </motion.div>
             <div className="couple-silhouette"><span>14</span><span>02</span></div>
             <div className="dragon-float">🐉</div>
           </motion.section>
