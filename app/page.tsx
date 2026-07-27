@@ -10,6 +10,9 @@ type GameState = {
   unlocked: number;
   completed: number[];
   inventory: string[];
+  rerolls?: number;
+  dragonBoosts?: number;
+  oniMaskUses?: number;
 };
 
 const initialState: GameState = {
@@ -18,7 +21,10 @@ const initialState: GameState = {
   coins: 0,
   unlocked: 1,
   completed: [],
-  inventory: ["Mapa do Tesouro"]
+  inventory: ["Mapa do Tesouro"],
+  rerolls: 0,
+  dragonBoosts: 0,
+  oniMaskUses: 0
 };
 
 const regions = [
@@ -80,10 +86,31 @@ export default function Game() {
   const [trustComplete, setTrustComplete] = useState(false);
   const [oniRolls, setOniRolls] = useState<number[]>([]);
   const [hunterMessage, setHunterMessage] = useState("");
+  const [trustTimer, setTrustTimer] = useState(60);
+  const [trustRunning, setTrustRunning] = useState(false);
+  const [dragonBoostUsed, setDragonBoostUsed] = useState(false);
+  const [lakeMemoryOne, setLakeMemoryOne] = useState(false);
+  const [lakeMemoryTwo, setLakeMemoryTwo] = useState(false);
+  const [lakeMemoryThree, setLakeMemoryThree] = useState(false);
+  const [lakeMessage, setLakeMessage] = useState("");
   const [state, setState] = useGameState();
   const audioRef = useRef<AudioContext | null>(null);
 
   const progress = useMemo(() => Math.min(100, (state.xp % 100)), [state.xp]);
+
+  useEffect(() => {
+    if (!trustRunning || trustTimer <= 0) return;
+    const timer = window.setInterval(() => setTrustTimer(value => value - 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [trustRunning, trustTimer]);
+
+  useEffect(() => {
+    if (trustTimer === 0 && trustRunning) {
+      setTrustRunning(false);
+      setTrustComplete(true);
+      chime(680, .4);
+    }
+  }, [trustTimer, trustRunning]);
 
   function chime(freq = 440, duration = 0.18) {
     if (muted) return;
@@ -149,7 +176,8 @@ export default function Game() {
         coins: prev.coins + (prev.completed.includes(2) ? 0 : 15),
         unlocked: Math.max(prev.unlocked, 3),
         completed: prev.completed.includes(2) ? prev.completed : [...prev.completed, 2],
-        inventory: prev.inventory.includes(dragonItem) ? prev.inventory : [...prev.inventory, dragonItem, "Guardião da Floresta"]
+        inventory: prev.inventory.includes(dragonItem) ? prev.inventory : [...prev.inventory, dragonItem, "Guardião da Floresta", "Ajuda do Dragão"],
+        dragonBoosts: Math.max(prev.dragonBoosts ?? 0, 1)
       };
     });
   }
@@ -199,7 +227,7 @@ export default function Game() {
       chime(160, .3);
       return;
     }
-    const total = oniRolls[0] + oniRolls[1];
+    const total = oniRolls[0] + oniRolls[1] + (dragonBoostUsed ? 1 : 0);
     chime(total >= 9 ? 860 : 620, .5);
     setHunterMessage(total >= 9 ? "Golpe perfeito! O Oni foi derrotado e a Máscara do Oni foi conquistada." : "Vocês derrotaram o Oni trabalhando juntos. A Máscara do Oni foi conquistada.");
     setState(prev => {
@@ -212,7 +240,40 @@ export default function Game() {
         coins: prev.coins + (first ? 25 : 0),
         unlocked: Math.max(prev.unlocked, 5),
         completed: first ? [...prev.completed, 4] : prev.completed,
-        inventory: prev.inventory.includes("Máscara do Oni") ? prev.inventory : [...prev.inventory, "Máscara do Oni"]
+        inventory: prev.inventory.includes("Máscara do Oni") ? prev.inventory : [...prev.inventory, "Máscara do Oni"],
+        oniMaskUses: Math.max(prev.oniMaskUses ?? 0, 1)
+      };
+    });
+  }
+
+  function useDragonBoost() {
+    if ((state.dragonBoosts ?? 0) < 1 || oniRolls.length < 2 || dragonBoostUsed) return;
+    setDragonBoostUsed(true);
+    setState(prev => ({ ...prev, dragonBoosts: Math.max(0, (prev.dragonBoosts ?? 0) - 1) }));
+    chime(760, .35);
+  }
+
+  function finishLake() {
+    if (!lakeMemoryOne || !lakeMemoryTwo || !lakeMemoryThree) {
+      setLakeMessage("Vivam e confirmem as três memórias antes de reunir os cristais.");
+      chime(160, .3);
+      return;
+    }
+    chime(880, .55);
+    setLakeMessage("Os três Cristais da Memória se unem. A Chave do Coração e um novo poder do dragão foram desbloqueados.");
+    setState(prev => {
+      const first = !prev.completed.includes(5);
+      const xp = prev.xp + (first ? 110 : 0);
+      const rewards = ["Cristal do Começo", "Cristal do Carinho", "Cristal do Futuro", "Chave do Coração", "Bônus do Dragão"];
+      return {
+        ...prev,
+        xp,
+        level: 1 + Math.floor(xp / 100),
+        coins: prev.coins + (first ? 30 : 0),
+        unlocked: Math.max(prev.unlocked, 6),
+        completed: first ? [...prev.completed, 5] : prev.completed,
+        rerolls: (prev.rerolls ?? 0) + (first ? 1 : 0),
+        inventory: [...prev.inventory, ...rewards.filter(item => !prev.inventory.includes(item))]
       };
     });
   }
@@ -486,21 +547,74 @@ export default function Game() {
 
               <section className="forest-section hunter-section">
                 <h3>2. Teste de Confiança</h3>
-                <p>Um aventureiro fica vendado enquanto o parceiro o guia apenas pela voz até completar uma tarefa simples. Depois, vocês trocam de posição.</p>
-                <button className={trustComplete ? "forest-finish completed-task" : "forest-finish"} onClick={() => { setTrustComplete(true); chime(620,.3); }}>{trustComplete ? "✓ Teste de confiança concluído" : "Concluir o teste de confiança"}</button>
+                <p><b>Desafio presencial obrigatório:</b> coloquem uma moeda entre as testas e caminhem juntos por 1 minuto sem deixá-la cair. Não vale segurar com as mãos. Depois, troquem quem conduz o caminho.</p>
+                <div className="physical-challenge">
+                  <span>🪙</span>
+                  <div><b>{trustComplete ? "Desafio concluído!" : trustRunning ? `Tempo restante: ${trustTimer}s` : "Preparem a moeda e fiquem de frente um para o outro."}</b><small>Este desafio deve ser realizado pessoalmente pelos dois.</small></div>
+                </div>
+                <button className={trustComplete ? "forest-finish completed-task" : "forest-finish"} disabled={trustComplete} onClick={() => { if (!trustRunning) { setTrustTimer(60); setTrustRunning(true); chime(520,.3); } }}>{trustComplete ? "✓ Teste de confiança concluído" : trustRunning ? "Cronômetro em andamento..." : "Iniciar desafio de 1 minuto"}</button>
               </section>
 
               <div className="chapter-transition hunter-transition"><span>👹</span><p>Um rugido interrompe o treinamento. Das árvores surge um Oni enorme. O mestre recua e avisa: desta vez, a vitória depende da soma das forças da dupla.</p><span>👹</span></div>
 
               <section className="forest-section hunter-section oni-section">
                 <h3>3. O Ataque do Oni</h3>
-                <p>Cada jogador rola o dado uma vez. Depois, os resultados são somados.</p>
+                <p>Cada jogador rola o dado uma vez. Depois, os resultados são somados: <b>2 a 5</b> significa falha e prenda; <b>6 a 8</b> derrota o Oni em equipe; <b>9 a 12</b> gera um golpe perfeito.</p>
+                <div className="dragon-help-box"><span>🐉</span><div><b>Ajuda do Dragão</b><small>Uma vez durante uma batalha, o dragão pode acrescentar +1 ao resultado final. Disponível: {state.dragonBoosts ?? 0}</small></div></div>
                 <div className="pirate-dice-row"><button disabled={oniRolls.length >= 2} onClick={() => rollHunterDie("oni")}>🎲 {oniRolls.length === 0 ? "Rolagem de Giselle" : oniRolls.length === 1 ? "Rolagem de Lucas" : "Batalha concluída"}</button><b>{oniRolls.length ? oniRolls.join(" + ") : "—"}</b></div>
-                {oniRolls.length === 2 && <div className="outcome-text"><b>Soma: {oniRolls[0] + oniRolls[1]}</b><p>{oniRolls[0] + oniRolls[1] <= 5 ? "O Oni resiste. Cumpram uma prenda e tentem novamente." : oniRolls[0] + oniRolls[1] <= 8 ? "Vocês derrotam o Oni trabalhando juntos." : "Golpe perfeito! O Oni é derrotado e uma recompensa especial é encontrada."}</p></div>}
+                {oniRolls.length === 2 && <div className="outcome-text"><b>Soma: {oniRolls[0] + oniRolls[1] + (dragonBoostUsed ? 1 : 0)} {dragonBoostUsed && "(com +1 do dragão)"}</b><p>{oniRolls[0] + oniRolls[1] + (dragonBoostUsed ? 1 : 0) <= 5 ? "O Oni resiste. Cumpram uma prenda e tentem novamente." : oniRolls[0] + oniRolls[1] + (dragonBoostUsed ? 1 : 0) <= 8 ? "Vocês derrotam o Oni trabalhando juntos." : "Golpe perfeito! O Oni é derrotado e uma recompensa especial é encontrada."}</p>{!dragonBoostUsed && (state.dragonBoosts ?? 0) > 0 && <button className="mini-action" onClick={useDragonBoost}>Usar +1 do dragão</button>}</div>}
                 <button className="forest-finish" onClick={finishHunters}>Finalizar o treinamento</button>
               </section>
 
               {hunterMessage && <motion.div className={hunterMessage.includes("Máscara") ? "result success" : "result fail"} initial={{ scale: .85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}><span>{hunterMessage}</span>{hunterMessage.includes("Máscara") && <div className="memory-reveal"><p><b>Recompensa desbloqueada: Máscara do Oni.</b> Pode ser usada uma vez durante a aventura para transformar uma falha em sucesso parcial.</p><p><em>“Vocês chegaram aqui como aventureiros. Agora partem como caçadores.”</em></p><button className="continue-button" onClick={() => { setSelected(null); setHunterMessage(""); }}>Seguir para o Lago das Memórias →</button></div>}</motion.div>}
+            </motion.article>
+          </motion.div>
+        )}
+
+        {selected === 5 && (
+          <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.article className="parchment lake-parchment" initial={{ scale: .75, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: .75, opacity: 0 }} transition={{ type: "spring", damping: 18 }}>
+              <button className="close" onClick={() => { setSelected(null); setLakeMessage(""); }}>×</button>
+              <div className="scroll-title lake-title"><span>💙</span><div><small>CAPÍTULO V</small><h2>Lago das Memórias</h2><p>As águas do coração</p></div><span>🌙</span></div>
+              <div className="story">
+                <p>Depois de concluírem o Treinamento dos Caçadores, Lucas, Giselle e o pequeno dragão seguem por um caminho iluminado por luzes azuis.</p>
+                <p>Ao final da trilha, encontram um lago completamente parado. A água não reflete seus rostos: ela revela momentos vividos pelos dois.</p>
+                <p>Uma voz surge das profundezas: <em>“Neste lago, não existe resposta certa ou errada. Apenas lembranças verdadeiras.”</em></p>
+                <p>Para atravessar, vocês precisam recuperar três Cristais da Memória.</p>
+              </div>
+
+              <div className="memory-grid">
+                <section className={`memory-card ${lakeMemoryOne ? "memory-done" : ""}`}>
+                  <span className="crystal">💎</span><h3>1. A Primeira Lembrança</h3>
+                  <p>Qual momento do começo da nossa história você gostaria de viver novamente?</p>
+                  <small>Os dois devem responder em voz alta, pessoalmente.</small>
+                  <button onClick={() => { setLakeMemoryOne(true); chime(600,.25); }}>{lakeMemoryOne ? "✓ Cristal do Começo desbloqueado" : "Nós dois respondemos"}</button>
+                </section>
+                <section className={`memory-card ${lakeMemoryTwo ? "memory-done" : ""}`}>
+                  <span className="crystal">💗</span><h3>2. O Reflexo do Carinho</h3>
+                  <p>Olhem um para o outro e completem: “Uma coisa em você que sempre consegue me fazer bem é...”</p>
+                  <small>Respondam olhando um para o outro.</small>
+                  <button onClick={() => { setLakeMemoryTwo(true); chime(640,.25); }}>{lakeMemoryTwo ? "✓ Cristal do Carinho desbloqueado" : "Nós dois completamos"}</button>
+                </section>
+                <section className={`memory-card ${lakeMemoryThree ? "memory-done" : ""}`}>
+                  <span className="crystal">🔮</span><h3>3. Uma Memória do Futuro</h3>
+                  <p>Cada um escreve, sem mostrar ao outro, uma coisa que gostaria muito que vocês vivessem juntos no futuro. Revelem ao mesmo tempo.</p>
+                  <small>Se escreverem coisas parecidas, o dragão concede uma nova chance de rolagem.</small>
+                  <button onClick={() => { setLakeMemoryThree(true); chime(680,.25); }}>{lakeMemoryThree ? "✓ Cristal do Futuro desbloqueado" : "Revelamos nossas respostas"}</button>
+                </section>
+              </div>
+
+              <div className="chapter-transition lake-transition"><span>🐉</span><p>Quando os três cristais são reunidos, o lago começa a brilhar. O pequeno dragão toca a água com a pata, e uma caixa sobe lentamente até a superfície.</p><span>🗝️</span></div>
+
+              <section className="forest-section lake-secret">
+                <h3>O Segredo do Lago</h3>
+                <div className="heart-key">🗝️💗</div>
+                <p><b>A Chave do Coração</b> permite cancelar uma penalidade ou permitir que o parceiro repita uma tentativa.</p>
+                <p><b>Bônus do Dragão:</b> vocês ganham uma repetição de dado para usar em uma fase futura.</p>
+                <button className="forest-finish" onClick={finishLake}>Reunir os três cristais</button>
+              </section>
+
+              {lakeMessage && <motion.div className={lakeMessage.startsWith("Os três") ? "result success" : "result fail"} initial={{ scale: .85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}><span>{lakeMessage}</span>{lakeMessage.startsWith("Os três") && <div className="memory-reveal"><p>Recompensas guardadas no Baú da Dupla: Chave do Coração, três Cristais da Memória e uma repetição de dado.</p><button className="continue-button" onClick={() => { setSelected(null); setLakeMessage(""); }}>Seguir para a Estrada das Conquistas →</button></div>}</motion.div>}
             </motion.article>
           </motion.div>
         )}
@@ -529,8 +643,9 @@ export default function Game() {
           <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.article className="inventory-panel" initial={{ x: 250 }} animate={{ x: 0 }} exit={{ x: 250 }}>
               <button className="close" onClick={() => setInventoryOpen(false)}>×</button>
-              <h2>Inventário da Dupla</h2><p>Relíquias encontradas durante a jornada.</p>
-              <div className="inventory-grid">{state.inventory.map((item, i) => <div key={item}><span>{["🗺️","💬","🗝️","💎","🎭","💍"][i % 6]}</span><b>{item}</b><small>Item especial</small></div>)}</div>
+              <h2>Baú de Conquistas</h2><p>Tudo o que vocês conquistaram e ainda podem usar durante a jornada.</p>
+              <div className="resource-strip"><span>🎲 Repetições: <b>{state.rerolls ?? 0}</b></span><span>🐉 Ajuda do Dragão: <b>{state.dragonBoosts ?? 0}</b></span><span>🎭 Máscara do Oni: <b>{state.oniMaskUses ?? 0}</b></span></div>
+              <div className="inventory-grid">{state.inventory.map((item, i) => <div key={item}><span>{["🗺️","💬","🗝️","💎","🎭","💍"][i % 6]}</span><b>{item}</b><small>{item === "Ajuda do Dragão" ? "+1 em uma batalha" : item === "Máscara do Oni" ? "Transforma falha em sucesso parcial" : item === "Bônus do Dragão" ? "Permite repetir um dado" : item === "Chave do Coração" ? "Cancela penalidade ou repete tentativa" : "Conquista da aventura"}</small></div>)}</div>
             </motion.article>
           </motion.div>
         )}
