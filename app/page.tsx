@@ -72,6 +72,14 @@ export default function Game() {
   const [bridgeRolls, setBridgeRolls] = useState<number[]>([]);
   const [parrotAnswer, setParrotAnswer] = useState("");
   const [pirateMessage, setPirateMessage] = useState("");
+  const [pirateBonusChoice, setPirateBonusChoice] = useState("");
+  const [pirateBonusRoll, setPirateBonusRoll] = useState<number | null>(null);
+  const [hunterStyleGigi, setHunterStyleGigi] = useState("");
+  const [hunterStyleLucas, setHunterStyleLucas] = useState("");
+  const [reflexRolls, setReflexRolls] = useState<number[]>([]);
+  const [trustComplete, setTrustComplete] = useState(false);
+  const [oniRolls, setOniRolls] = useState<number[]>([]);
+  const [hunterMessage, setHunterMessage] = useState("");
   const [state, setState] = useGameState();
   const audioRef = useRef<AudioContext | null>(null);
 
@@ -154,7 +162,8 @@ export default function Game() {
   }
 
   function finishPirates() {
-    if (!pirateMethod || pirateRolls.length < 1 || bridgeRolls.length < 2 || !parrotAnswer) {
+    const chestFailed = pirateRolls.length > 0 && pirateRolls[pirateRolls.length - 1] <= 2;
+    if (!pirateMethod || pirateRolls.length < 1 || (chestFailed && pirateBonusRoll === null) || bridgeRolls.length < 2 || !parrotAnswer) {
       setPirateMessage("Concluam todas as escolhas e rolagens da ilha antes de abrir o tesouro.");
       chime(160, .3);
       return;
@@ -173,6 +182,37 @@ export default function Game() {
         unlocked: Math.max(prev.unlocked, 4),
         completed: first ? [...prev.completed, 3] : prev.completed,
         inventory: [...prev.inventory, ...rewards.filter(item => !prev.inventory.includes(item))]
+      };
+    });
+  }
+
+  function rollHunterDie(target: "reflex" | "oni") {
+    const result = 1 + Math.floor(Math.random() * 6);
+    chime(result >= 5 ? 720 : result >= 3 ? 500 : 180, .3);
+    if (target === "reflex") setReflexRolls(prev => [...prev, result].slice(-2));
+    else setOniRolls(prev => [...prev, result].slice(-2));
+  }
+
+  function finishHunters() {
+    if (!hunterStyleGigi || !hunterStyleLucas || reflexRolls.length < 2 || !trustComplete || oniRolls.length < 2) {
+      setHunterMessage("Concluam os estilos, os testes e a batalha contra o Oni antes de seguir.");
+      chime(160, .3);
+      return;
+    }
+    const total = oniRolls[0] + oniRolls[1];
+    chime(total >= 9 ? 860 : 620, .5);
+    setHunterMessage(total >= 9 ? "Golpe perfeito! O Oni foi derrotado e a Máscara do Oni foi conquistada." : "Vocês derrotaram o Oni trabalhando juntos. A Máscara do Oni foi conquistada.");
+    setState(prev => {
+      const first = !prev.completed.includes(4);
+      const xp = prev.xp + (first ? 95 : 0);
+      return {
+        ...prev,
+        xp,
+        level: 1 + Math.floor(xp / 100),
+        coins: prev.coins + (first ? 25 : 0),
+        unlocked: Math.max(prev.unlocked, 5),
+        completed: first ? [...prev.completed, 4] : prev.completed,
+        inventory: prev.inventory.includes("Máscara do Oni") ? prev.inventory : [...prev.inventory, "Máscara do Oni"]
       };
     });
   }
@@ -305,8 +345,15 @@ export default function Game() {
                 <h3>2. O ataque dos raptores</h3>
                 <p>Um galho se quebra. Depois outro. Três raptores surgem entre as árvores e cercam vocês.</p>
                 <div className="raptor-roar">GRRRRRRRRRR!</div>
+                <div className="combat-actions">
+                  <h4>⚔ Ação de combate</h4>
+                  <p>Cada herói utiliza a habilidade da arma escolhida:</p>
+                  <div><b>Giselle:</b> {gigiWeapon || "escolha uma arma"} → {gigiWeapon.includes("Espada") ? "ATACAR" : gigiWeapon.includes("Arco") ? "MIRAR" : gigiWeapon.includes("Machado") ? "GOLPE DEVASTADOR" : gigiWeapon.includes("Escudo") ? "PROTEGER" : gigiWeapon.includes("Cajado") ? "LANÇAR MAGIA" : "—"}</div>
+                  <div><b>Lucas:</b> {lucasWeapon || "escolha uma arma"} → {lucasWeapon.includes("Espada") ? "ATACAR" : lucasWeapon.includes("Arco") ? "MIRAR" : lucasWeapon.includes("Machado") ? "GOLPE DEVASTADOR" : lucasWeapon.includes("Escudo") ? "PROTEGER" : lucasWeapon.includes("Cajado") ? "LANÇAR MAGIA" : "—"}</div>
+                </div>
                 <h4>3. A força da dupla</h4>
                 <ChoiceGroup title="Como vocês enfrentarão a batalha?" value={forestStrategy} setValue={setForestStrategy} options={["⚔️ Ataque duplo", "🛡️ Ataque e defesa", "🌿 Estratégia", "🏃 Fugir"]} />
+                {forestStrategy && <div className="strategy-consequence">{forestStrategy.includes("Ataque duplo") ? "Grande dano é causado aos inimigos, mas ambos ficam vulneráveis." : forestStrategy.includes("Ataque e defesa") ? "O dano é menor, porém a dupla avança com maior segurança." : forestStrategy.includes("Estratégia") ? "Enigma da floresta: o que fica mais forte quando é dividido? Resposta: a confiança." : "Vocês sobrevivem, mas perdem uma recompensa desta fase."}</div>}
               </section>
 
               <div className="chapter-transition">
@@ -357,7 +404,13 @@ export default function Game() {
                   <button onClick={() => rollPirateDie("chest")}>🎲 Rolar o Dado do Destino</button>
                   <b>{pirateRolls.length ? `Resultado: ${pirateRolls[pirateRolls.length - 1]}` : "Aguardando o destino..."}</b>
                 </div>
-                {pirateRolls.length > 0 && <p className="outcome-text">{pirateRolls.at(-1)! <= 2 ? "Falha: piratas inimigos aparecem entre os destroços." : pirateRolls.at(-1)! <= 4 ? "Sucesso parcial: vocês abrem o baú, mas parte do conteúdo foi danificada." : "Sucesso total: o primeiro fragmento do mapa e uma Moeda Pirata foram encontrados."}</p>}
+                {pirateRolls.length > 0 && <div className="outcome-text">{pirateRolls.at(-1)! <= 2 ? <>
+                  <b>Falha: piratas inimigos aparecem entre os destroços.</b>
+                  <p>O capitão grita para vocês não desistirem. Uma trilha secreta se abre entre as pedras: concluam a missão bônus para escapar do ataque e recuperar a pista.</p>
+                  <ChoiceGroup title="Missão bônus — como vocês escapam?" value={pirateBonusChoice} setValue={setPirateBonusChoice} options={["Investigar as margens", "Pedir ajuda ao dragão", "Atravessar pelas pedras"]} />
+                  <div className="pirate-dice-row"><button disabled={!pirateBonusChoice} onClick={() => { const r=1+Math.floor(Math.random()*6); setPirateBonusRoll(r); chime(r>=3?650:220,.3); }}>🎲 Rolar dado bônus</button><b>{pirateBonusRoll === null ? "Aguardando..." : `Resultado: ${pirateBonusRoll}`}</b></div>
+                  {pirateBonusRoll !== null && <p>{pirateBonusRoll <= 2 ? "Vocês se molham e se perdem por alguns minutos, mas encontram pegadas misteriosas e conseguem continuar." : pirateBonusRoll <= 4 ? "Vocês encontram uma pista verdadeira do fragmento e escapam dos piratas." : "Vocês encontram a pista, uma Moeda Pirata extra e o dragão comemora a vitória!"}</p>}
+                </> : pirateRolls.at(-1)! <= 4 ? "Sucesso parcial: vocês abrem o baú, mas parte do conteúdo foi danificada." : "Sucesso total: o primeiro fragmento do mapa e uma Moeda Pirata foram encontrados."}</div>}
               </section>
 
               <div className="chapter-transition pirate-transition"><span>✦</span><p>Com a primeira pista em mãos, vocês avançam para o interior da ilha. O caminho termina diante de uma ponte antiga suspensa sobre um vale profundo. As tábuas rangem, a corda está desgastada e o pequeno dragão voa de um lado para o outro, claramente desconfiado.</p><span>✦</span></div>
@@ -369,7 +422,10 @@ export default function Game() {
                   <button onClick={() => rollPirateDie("bridge")} disabled={bridgeRolls.length >= 2}>🎲 {bridgeRolls.length === 0 ? "Rolagem de Giselle" : bridgeRolls.length === 1 ? "Rolagem de Lucas" : "Rolagens concluídas"}</button>
                   <b>{bridgeRolls.length ? bridgeRolls.join(" + ") : "—"}</b>
                 </div>
-                {bridgeRolls.length === 2 && <p className="outcome-text">{bridgeRolls[0] >= 3 && bridgeRolls[1] >= 3 ? "Ambos conseguem 3 ou mais: vocês atravessam em segurança." : bridgeRolls[0] < 3 && bridgeRolls[1] < 3 ? "Ambos falharam: a ponte desmorona e vocês encontram um caminho alternativo." : "Apenas um falhou: o outro aventureiro consegue salvá-lo."}</p>}
+                {bridgeRolls.length === 2 && <div className="outcome-text">
+                  <b>Giselle tirou {bridgeRolls[0]} e Lucas tirou {bridgeRolls[1]}. Soma total: {bridgeRolls[0] + bridgeRolls[1]}.</b>
+                  <p>{bridgeRolls[0] >= 3 && bridgeRolls[1] >= 3 ? "Os dois obtiveram 3 ou mais, então atravessam a ponte em segurança." : bridgeRolls[0] < 3 && bridgeRolls[1] < 3 ? "Os dois tiraram menos de 3. Por isso a dupla falhou: a ponte desmorona e o caminho alternativo é desbloqueado." : "Um dos jogadores tirou menos de 3, mas o outro conseguiu 3 ou mais e pode salvá-lo."}</p>
+                </div>}
               </section>
 
               <div className="chapter-transition pirate-transition"><span>🦜</span><p>Do outro lado da mata, um papagaio de chapéu pirata pousa sobre uma placa torta. Ele inclina a cabeça, bate as asas e avisa que a sabedoria abre caminhos. Para revelar a pista final, exige uma resposta que represente tudo o que vocês viveram até aqui.</p><span>🦜</span></div>
@@ -394,6 +450,57 @@ export default function Game() {
                 <span>{pirateMessage}</span>
                 {pirateMessage.startsWith("Tesouro") && <button className="continue-button" onClick={() => { setSelected(null); setPirateMessage(""); }}>Seguir para o mapa →</button>}
               </motion.div>}
+            </motion.article>
+          </motion.div>
+        )}
+
+        {selected === 4 && (
+          <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.article className="parchment hunter-parchment" initial={{ scale: .72, opacity: 0, rotateX: -25 }} animate={{ scale: 1, opacity: 1, rotateX: 0 }} exit={{ scale: .72, opacity: 0 }} transition={{ type: "spring", damping: 18 }}>
+              <button className="close" onClick={() => { setSelected(null); setHunterMessage(""); }}>×</button>
+              <div className="scroll-title hunter-title"><span>⚔️</span><div><small>CAPÍTULO IV</small><h2>Treinamento dos Caçadores</h2><p>O despertar das habilidades</p></div><span>👹</span></div>
+              <div className="story">
+                <p>Depois de deixarem a Ilha dos Piratas, Lucas, Giselle e o pequeno dragão seguem o caminho revelado pela Chave Dourada.</p>
+                <p>No alto de uma montanha, encontram um antigo campo de treinamento. Um caçador mascarado observa os aventureiros e declara:</p>
+                <p><em>“Sobreviver aos perigos foi apenas o começo. Agora vocês precisam aprender a lutar como uma verdadeira dupla.”</em></p>
+              </div>
+
+              <section className="forest-section hunter-section">
+                <h3>Escolham seu estilo</h3>
+                <div className="weapon-columns">
+                  <ChoiceGroup title="Giselle" value={hunterStyleGigi} setValue={setHunterStyleGigi} options={["🔥 Chama", "💧 Água", "⚡ Raio", "🌪️ Vento", "💗 Coração"]} />
+                  <ChoiceGroup title="Lucas" value={hunterStyleLucas} setValue={setHunterStyleLucas} options={["🔥 Chama", "💧 Água", "⚡ Raio", "🌪️ Vento", "💗 Coração"]} />
+                </div>
+              </section>
+
+              <div className="chapter-transition hunter-transition"><span>🎯</span><p>O mestre conduz vocês até um corredor de alvos de madeira. Flechas surgem de pontos escondidos e cada aventureiro precisa confiar nos próprios reflexos.</p><span>🎯</span></div>
+
+              <section className="forest-section hunter-section">
+                <h3>1. Teste de Reflexos</h3>
+                <p>Cada jogador deverá rolar o Dado do Destino uma vez.</p>
+                <div className="pirate-dice-row"><button disabled={reflexRolls.length >= 2} onClick={() => rollHunterDie("reflex")}>🎲 {reflexRolls.length === 0 ? "Rolagem de Giselle" : reflexRolls.length === 1 ? "Rolagem de Lucas" : "Teste concluído"}</button><b>{reflexRolls.length ? reflexRolls.join(" + ") : "—"}</b></div>
+                {reflexRolls.length === 2 && <div className="outcome-text"><p>1 ou 2: o alvo acerta o jogador e ele cumpre uma prenda.</p><p>3 ou 4: consegue desviar.</p><p>5 ou 6: desvia e destrói o alvo com sua habilidade.</p><b>Resultados: Giselle {reflexRolls[0]} | Lucas {reflexRolls[1]}</b></div>}
+              </section>
+
+              <div className="chapter-transition hunter-transition"><span>💞</span><p>Depois dos alvos, o mestre apaga todas as lanternas. Agora não basta enxergar: vocês precisam confiar na voz um do outro.</p><span>💞</span></div>
+
+              <section className="forest-section hunter-section">
+                <h3>2. Teste de Confiança</h3>
+                <p>Um aventureiro fica vendado enquanto o parceiro o guia apenas pela voz até completar uma tarefa simples. Depois, vocês trocam de posição.</p>
+                <button className={trustComplete ? "forest-finish completed-task" : "forest-finish"} onClick={() => { setTrustComplete(true); chime(620,.3); }}>{trustComplete ? "✓ Teste de confiança concluído" : "Concluir o teste de confiança"}</button>
+              </section>
+
+              <div className="chapter-transition hunter-transition"><span>👹</span><p>Um rugido interrompe o treinamento. Das árvores surge um Oni enorme. O mestre recua e avisa: desta vez, a vitória depende da soma das forças da dupla.</p><span>👹</span></div>
+
+              <section className="forest-section hunter-section oni-section">
+                <h3>3. O Ataque do Oni</h3>
+                <p>Cada jogador rola o dado uma vez. Depois, os resultados são somados.</p>
+                <div className="pirate-dice-row"><button disabled={oniRolls.length >= 2} onClick={() => rollHunterDie("oni")}>🎲 {oniRolls.length === 0 ? "Rolagem de Giselle" : oniRolls.length === 1 ? "Rolagem de Lucas" : "Batalha concluída"}</button><b>{oniRolls.length ? oniRolls.join(" + ") : "—"}</b></div>
+                {oniRolls.length === 2 && <div className="outcome-text"><b>Soma: {oniRolls[0] + oniRolls[1]}</b><p>{oniRolls[0] + oniRolls[1] <= 5 ? "O Oni resiste. Cumpram uma prenda e tentem novamente." : oniRolls[0] + oniRolls[1] <= 8 ? "Vocês derrotam o Oni trabalhando juntos." : "Golpe perfeito! O Oni é derrotado e uma recompensa especial é encontrada."}</p></div>}
+                <button className="forest-finish" onClick={finishHunters}>Finalizar o treinamento</button>
+              </section>
+
+              {hunterMessage && <motion.div className={hunterMessage.includes("Máscara") ? "result success" : "result fail"} initial={{ scale: .85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}><span>{hunterMessage}</span>{hunterMessage.includes("Máscara") && <div className="memory-reveal"><p><b>Recompensa desbloqueada: Máscara do Oni.</b> Pode ser usada uma vez durante a aventura para transformar uma falha em sucesso parcial.</p><p><em>“Vocês chegaram aqui como aventureiros. Agora partem como caçadores.”</em></p><button className="continue-button" onClick={() => { setSelected(null); setHunterMessage(""); }}>Seguir para o Lago das Memórias →</button></div>}</motion.div>}
             </motion.article>
           </motion.div>
         )}
