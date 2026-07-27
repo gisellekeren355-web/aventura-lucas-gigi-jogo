@@ -45,6 +45,11 @@ function useGameState() {
   return [state, setState] as const;
 }
 
+
+function ChoiceGroup({ title, value, setValue, options }: { title: string; value: string; setValue: (value: string) => void; options: string[] }) {
+  return <div className="choice-group"><b>{title}</b><div>{options.map(option => <button key={option} className={value === option ? "selected-choice" : ""} onClick={() => setValue(option)}>{option}</button>)}</div></div>;
+}
+
 export default function Game() {
   const [started, setStarted] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
@@ -54,6 +59,14 @@ export default function Game() {
   const [message, setMessage] = useState("");
   const [muted, setMuted] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [gigiWeapon, setGigiWeapon] = useState("");
+  const [lucasWeapon, setLucasWeapon] = useState("");
+  const [forestStrategy, setForestStrategy] = useState("");
+  const [dragonElement, setDragonElement] = useState("");
+  const [dragonLook, setDragonLook] = useState("");
+  const [dragonPersonality, setDragonPersonality] = useState("");
+  const [dragonName, setDragonName] = useState("");
+  const [forestMessage, setForestMessage] = useState("");
   const [state, setState] = useGameState();
   const audioRef = useRef<AudioContext | null>(null);
 
@@ -103,6 +116,29 @@ export default function Game() {
     chime(560, 0.25);
     setSelected(null);
     setMessage("");
+  }
+
+  function finishForest() {
+    if (!gigiWeapon || !lucasWeapon || !forestStrategy || !dragonElement || !dragonLook || !dragonPersonality || !dragonName.trim()) {
+      setForestMessage("Preencham todas as escolhas antes de seguir.");
+      chime(160, .3);
+      return;
+    }
+    chime(760, .45);
+    setForestMessage("O Guardião da Floresta foi despertado! A Ilha dos Piratas está desbloqueada.");
+    setState(prev => {
+      const xp = prev.xp + (prev.completed.includes(2) ? 0 : 70);
+      const dragonItem = `Dragão: ${dragonName.trim()}`;
+      return {
+        ...prev,
+        xp,
+        level: 1 + Math.floor(xp / 100),
+        coins: prev.coins + (prev.completed.includes(2) ? 0 : 15),
+        unlocked: Math.max(prev.unlocked, 3),
+        completed: prev.completed.includes(2) ? prev.completed : [...prev.completed, 2],
+        inventory: prev.inventory.includes(dragonItem) ? prev.inventory : [...prev.inventory, dragonItem, "Guardião da Floresta"]
+      };
+    });
   }
 
   function rollDice() {
@@ -182,9 +218,9 @@ export default function Game() {
               <div className="scroll-title"><span>🏡</span><div><small>CAPÍTULO I</small><h2>Vila Inicial</h2><p>O começo de tudo</p></div><span>🌳</span></div>
               <div className="story">
                 <p>Duas pessoas. Duas histórias.<br />Dois caminhos que, até então, seguiam separados.</p>
-                <p>Lucas tinha acabado de sair de uma história complexa. Giselle, por outro lado, estava apenas vivendo mais um dia comum, assistindo vídeos e comentando no Instagram.</p>
+                <p>Lucas tinha acabado de sair de um romance complexo e estava desacreditado no amor. Giselle, por outro lado, estava apenas vivendo mais um dia comum, assistindo vídeos e comentando no Instagram.</p>
                 <p>Até que um comentário completamente aleatório chamou sua atenção. A cada comentário, uma nova pergunta surgia: <em>“Quem é essa garota?”</em></p>
-                <p className="date">✦ 03/08/2025 ✦</p>
+                <p className="date">✦ 03/08/2025 ✦<small>O dia em que nos encontramos pessoalmente pela primeira vez.</small></p>
               </div>
               <div className="elder-hint"><div className="elder">🧙‍♂️</div><div><b>Dica do Ancião da Vila</b><p>“As memórias deste acontecimento estão escondidas em um vídeo caótico...”</p><small>Um grupo de homens fazendo algo tão perigoso quanto engraçado.</small></div></div>
               <div className="question"><h3>Qual foi o primeiro comentário de Giselle que chamou a atenção de Lucas?</h3>
@@ -193,6 +229,55 @@ export default function Game() {
               {message && <motion.div className={message.startsWith("Memória") ? "result success" : "result fail"} initial={{ scale: .8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
                 <span>{message}</span>
                 {message.startsWith("Memória") && <button className="continue-button" onClick={continueJourney}>Continuar jornada →</button>}
+              </motion.div>}
+            </motion.article>
+          </motion.div>
+        )}
+
+        {selected === 2 && (
+          <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.article className="parchment forest-parchment" initial={{ rotateY: -55, scale: .75, opacity: 0 }} animate={{ rotateY: 0, scale: 1, opacity: 1 }} exit={{ scale: .75, opacity: 0 }} transition={{ type: "spring", damping: 18 }}>
+              <button className="close" onClick={() => { setSelected(null); setForestMessage(""); }}>×</button>
+              <div className="scroll-title forest-title"><span>🦖</span><div><small>CAPÍTULO II</small><h2>Floresta Jurássica</h2><p>Os heróis da floresta</p></div><span>🧭</span></div>
+              <div className="story">
+                <p>Depois de recuperarem a primeira memória de sua aventura, um novo caminho foi revelado.</p>
+                <p>As árvores são tão altas que escondem a luz do céu. Sons misteriosos ecoam entre as folhas, enquanto criaturas antigas observam silenciosamente cada passo dado pelos aventureiros.</p>
+                <p>Dizem que esta floresta guarda um grande tesouro. Mas apenas aqueles que lutam juntos serão capazes de encontrá-lo.</p>
+              </div>
+
+              <section className="forest-section">
+                <h3>1. Escolha das armas</h3>
+                <p>Em um antigo acampamento abandonado, cinco armas lendárias se revelam diante dos heróis.</p>
+                <div className="weapon-columns">
+                  <ChoiceGroup title="Giselle" value={gigiWeapon} setValue={setGigiWeapon} options={["⚔️ Espada", "🏹 Arco", "🪓 Machado", "🛡️ Escudo", "🪄 Cajado Mágico"]} />
+                  <ChoiceGroup title="Lucas" value={lucasWeapon} setValue={setLucasWeapon} options={["⚔️ Espada", "🏹 Arco", "🪓 Machado", "🛡️ Escudo", "🪄 Cajado Mágico"]} />
+                </div>
+              </section>
+
+              <section className="forest-section raptor-section">
+                <h3>2. O ataque dos raptores</h3>
+                <p>Um galho se quebra. Depois outro. Três raptores surgem entre as árvores e cercam vocês.</p>
+                <div className="raptor-roar">GRRRRRRRRRR!</div>
+                <h4>3. A força da dupla</h4>
+                <ChoiceGroup title="Como vocês enfrentarão a batalha?" value={forestStrategy} setValue={setForestStrategy} options={["⚔️ Ataque duplo", "🛡️ Ataque e defesa", "🌿 Estratégia", "🏃 Fugir"]} />
+              </section>
+
+              <section className="forest-section dragon-section">
+                <div className="dragon-birth"><span>🥚</span><span>🐉</span></div>
+                <h3>4. A descoberta — Um dragão nasceu!</h3>
+                <p>Depois da batalha, vocês encontram um enorme ovo coberto por escamas brilhantes. Uma pequena luz escapa pelas rachaduras e a criatura abre os olhos pela primeira vez.</p>
+                <div className="dragon-customizer">
+                  <ChoiceGroup title="Elemento" value={dragonElement} setValue={setDragonElement} options={["🔥 Fogo", "❄️ Gelo", "⚡ Raio", "🌑 Sombra", "🌿 Natureza"]} />
+                  <ChoiceGroup title="Aparência" value={dragonLook} setValue={setDragonLook} options={["Pequeno e fofo", "Imponente", "Misterioso", "Ameaçador", "Engraçado"]} />
+                  <ChoiceGroup title="Personalidade" value={dragonPersonality} setValue={setDragonPersonality} options={["Corajoso", "Inteligente", "Explosivo", "Leal", "Caótico"]} />
+                </div>
+                <label className="dragon-name">Todo grande dragão precisa de um nome<input value={dragonName} onChange={e => setDragonName(e.target.value)} placeholder="Nome do dragão" maxLength={24} /></label>
+                <button className="forest-finish" onClick={finishForest}>Concluir a Floresta Jurássica</button>
+              </section>
+
+              {forestMessage && <motion.div className={forestMessage.startsWith("O Guardião") ? "result success" : "result fail"} initial={{ scale: .85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+                <span>{forestMessage}</span>
+                {forestMessage.startsWith("O Guardião") && <button className="continue-button" onClick={() => { setSelected(null); setForestMessage(""); }}>Seguir para o mapa →</button>}
               </motion.div>}
             </motion.article>
           </motion.div>
