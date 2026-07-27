@@ -103,6 +103,22 @@ export default function Game() {
   const [roadDragonBoostUsed, setRoadDragonBoostUsed] = useState(false);
   const [roadRerollUsed, setRoadRerollUsed] = useState(false);
   const [roadMaskUsed, setRoadMaskUsed] = useState(false);
+  const [roadDiagnostic, setRoadDiagnostic] = useState("");
+  const [roadSearchRolls, setRoadSearchRolls] = useState<number[]>([]);
+  const [roadQuizAnswers, setRoadQuizAnswers] = useState<string[]>(["", "", "", ""]);
+  const [roadTestRolls, setRoadTestRolls] = useState<number[]>([]);
+  const [roadPurchasedBike, setRoadPurchasedBike] = useState("");
+  const [arenaTeamName, setArenaTeamName] = useState("");
+  const [arenaPasses, setArenaPasses] = useState(0);
+  const [arenaGoals, setArenaGoals] = useState<number[]>([]);
+  const [arenaPromise, setArenaPromise] = useState(false);
+  const [arenaMessage, setArenaMessage] = useState("");
+  const [castleTimer, setCastleTimer] = useState(15);
+  const [castleRunning, setCastleRunning] = useState(false);
+  const [castleChallengeComplete, setCastleChallengeComplete] = useState(false);
+  const [castleGateChoice, setCastleGateChoice] = useState("");
+  const [castleRolls, setCastleRolls] = useState<number[]>([]);
+  const [castleMessage, setCastleMessage] = useState("");
   const [reflexPenaltiesPending, setReflexPenaltiesPending] = useState(0);
   const [diceContext, setDiceContext] = useState<"village" | "reflex" | "road" | null>(null);
   const [state, setState] = useGameState();
@@ -123,6 +139,20 @@ export default function Game() {
       chime(680, .4);
     }
   }, [trustTimer, trustRunning]);
+
+  useEffect(() => {
+    if (!castleRunning || castleTimer <= 0) return;
+    const timer = window.setInterval(() => setCastleTimer(value => value - 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [castleRunning, castleTimer]);
+
+  useEffect(() => {
+    if (castleTimer === 0 && castleRunning) {
+      setCastleRunning(false);
+      setCastleChallengeComplete(true);
+      chime(780, .4);
+    }
+  }, [castleTimer, castleRunning]);
 
   function chime(freq = 440, duration = 0.18) {
     if (muted) return;
@@ -297,64 +327,108 @@ export default function Game() {
     });
   }
 
-  function rollRoadDie() {
+  function rollRoadSearch() {
     const result = 1 + Math.floor(Math.random() * 6);
-    setRoadRolls(prev => [...prev, result].slice(-2));
+    setRoadSearchRolls(prev => [...prev, result].slice(-2));
     chime(result >= 5 ? 760 : result >= 3 ? 520 : 180, .3);
   }
 
-  function useRoadReroll() {
-    if ((state.rerolls ?? 0) < 1 || roadRolls.length === 0 || roadRerollUsed) return;
+  function rollRoadTest() {
     const result = 1 + Math.floor(Math.random() * 6);
-    setRoadRolls(prev => [...prev.slice(0, -1), result]);
-    setRoadRerollUsed(true);
-    setState(prev => ({ ...prev, rerolls: Math.max(0, (prev.rerolls ?? 0) - 1) }));
-    chime(700, .35);
+    setRoadTestRolls(prev => [...prev, result].slice(-2));
+    chime(result >= 5 ? 760 : result >= 3 ? 520 : 180, .3);
   }
 
-  function useRoadDragonBoost() {
-    if ((state.dragonBoosts ?? 0) < 1 || roadRolls.length < 2 || roadDragonBoostUsed) return;
-    setRoadDragonBoostUsed(true);
-    setState(prev => ({ ...prev, dragonBoosts: Math.max(0, (prev.dragonBoosts ?? 0) - 1) }));
-    chime(760, .35);
+  function updateRoadQuiz(index: number, answer: string) {
+    setRoadQuizAnswers(prev => prev.map((item, i) => i === index ? answer : item));
   }
 
-  function useRoadMask() {
-    if ((state.oniMaskUses ?? 0) < 1 || roadRolls.length < 2 || roadMaskUsed) return;
-    setRoadMaskUsed(true);
-    setState(prev => ({ ...prev, oniMaskUses: Math.max(0, (prev.oniMaskUses ?? 0) - 1) }));
-    chime(820, .35);
+  function roadScore() {
+    const diagnostic = roadDiagnostic === "🔋 Bateria ou sistema elétrico" ? 20 : roadDiagnostic ? 10 : 0;
+    const search = roadSearchRolls.reduce((sum, roll) => sum + (roll >= 5 ? 10 : roll >= 3 ? 5 : 0), 0);
+    const correct = ["Kawasaki Ninja H2R", "Sistema antitravamento dos freios", "Transmitir a força do motor para a roda traseira", "MT-07"];
+    const quiz = roadQuizAnswers.reduce((sum, answer, i) => sum + (answer === correct[i] ? 5 : 0), 0);
+    const total = roadTestRolls.length === 2 ? roadTestRolls[0] + roadTestRolls[1] : 0;
+    const test = total >= 10 ? 30 : total >= 7 ? 25 : total >= 4 ? 15 : roadTestRolls.length === 2 ? 10 : 0;
+    const partnership = roadDiagnostic && roadSearchRolls.length === 2 && roadQuizAnswers.every(Boolean) && roadTestRolls.length === 2 ? 10 : 0;
+    return diagnostic + search + quiz + test + partnership;
   }
+
+  const bikePrices: Record<string, number> = { "MT-03": 30, "MT-07": 50, "R3": 70, "R1": 100 };
 
   function finishRoad() {
-    if (!roadBikeGigi || !roadBikeLucas || roadRolls.length < 2 || !roadChoice) {
-      setRoadMessage("Escolham as motos, concluam as duas rolagens e tomem a decisão final da estrada.");
+    const score = roadScore();
+    if (!roadDiagnostic || roadSearchRolls.length < 2 || roadQuizAnswers.some(answer => !answer) || roadTestRolls.length < 2) {
+      setRoadMessage("Concluam o diagnóstico, a busca pelas peças, o quiz e o teste da estrada.");
       chime(160, .3);
       return;
     }
-    const total = roadRolls[0] + roadRolls[1] + (roadDragonBoostUsed ? 1 : 0);
-    const success = total >= 7 || roadMaskUsed;
-    if (!success) {
-      setRoadMessage("A tempestade fechou a estrada. Usem um bônus disponível ou cumpram uma prenda e tentem novamente.");
-      setDiceContext("road");
-      setShowDice(true);
-      chime(160, .35);
+    if (!roadPurchasedBike) {
+      setRoadMessage("Escolham uma moto na Loja das Máquinas Lendárias.");
+      chime(160, .3);
+      return;
+    }
+    if ((bikePrices[roadPurchasedBike] ?? 999) > score) {
+      setRoadMessage("Vocês ainda não possuem pontos suficientes para essa moto. Escolham outra máquina.");
+      chime(160, .3);
       return;
     }
     chime(900, .55);
-    setRoadMessage("A dupla cruzou a Estrada das Conquistas! O Emblema da Liberdade foi conquistado e a Arena do Futebol está desbloqueada.");
+    setRoadMessage(`A ${roadPurchasedBike} foi conquistada! A dupla cruzou a Estrada das Conquistas e liberou a Arena do Futebol.`);
     setState(prev => {
       const first = !prev.completed.includes(6);
       const xp = prev.xp + (first ? 120 : 0);
+      const rewards = ["Emblema da Liberdade", `Moto conquistada: ${roadPurchasedBike}`];
       return {
-        ...prev,
-        xp,
-        level: 1 + Math.floor(xp / 100),
-        coins: prev.coins + (first ? 35 : 0),
-        unlocked: Math.max(prev.unlocked, 7),
-        completed: first ? [...prev.completed, 6] : prev.completed,
-        inventory: prev.inventory.includes("Emblema da Liberdade") ? prev.inventory : [...prev.inventory, "Emblema da Liberdade"]
+        ...prev, xp, level: 1 + Math.floor(xp / 100), coins: prev.coins + (first ? 35 : 0),
+        unlocked: Math.max(prev.unlocked, 7), completed: first ? [...prev.completed, 6] : prev.completed,
+        inventory: [...prev.inventory, ...rewards.filter(item => !prev.inventory.includes(item))]
       };
+    });
+  }
+
+  function rollArenaGoal() {
+    const result = 1 + Math.floor(Math.random() * 6);
+    setArenaGoals(prev => [...prev, result].slice(-2));
+    chime(result >= 5 ? 780 : result >= 3 ? 520 : 180, .3);
+  }
+
+  function finishArena() {
+    if (!arenaTeamName.trim() || arenaPasses < 5 || arenaGoals.length < 2 || !arenaPromise) {
+      setArenaMessage("Concluam o nome da equipe, os cinco passes, as duas cobranças e a promessa da dupla.");
+      chime(160, .3); return;
+    }
+    chime(860, .5);
+    setArenaMessage("Vitória da dupla! O Troféu da Sintonia foi conquistado e os portões do Castelo do Destino se abriram.");
+    setState(prev => {
+      const first = !prev.completed.includes(7);
+      const xp = prev.xp + (first ? 125 : 0);
+      return {...prev, xp, level: 1 + Math.floor(xp / 100), coins: prev.coins + (first ? 40 : 0), unlocked: Math.max(prev.unlocked, 8), completed: first ? [...prev.completed, 7] : prev.completed, inventory: prev.inventory.includes("Troféu da Sintonia") ? prev.inventory : [...prev.inventory, "Troféu da Sintonia"]};
+    });
+  }
+
+  function rollCastleDie() {
+    const result = 1 + Math.floor(Math.random() * 6);
+    setCastleRolls(prev => [...prev, result].slice(-2));
+    chime(result >= 5 ? 820 : result >= 3 ? 520 : 180, .3);
+  }
+
+  function finishCastle() {
+    if (!castleChallengeComplete || !castleGateChoice || castleRolls.length < 2) {
+      setCastleMessage("Concluam o desafio presencial, escolham a chave do portão e realizem as duas rolagens.");
+      chime(160, .3); return;
+    }
+    const total = castleRolls[0] + castleRolls[1];
+    if (total < 6) {
+      setCastleMessage("O portão resistiu. Cumpram uma prenda do Dado do Destino e tentem as rolagens novamente.");
+      setDiceContext("road"); setShowDice(true); chime(160,.3); return;
+    }
+    chime(940,.55);
+    setCastleMessage("Os portões se abriram. O Anel da Promessa foi conquistado e o caminho para o Tesouro Final apareceu.");
+    setState(prev => {
+      const first = !prev.completed.includes(8);
+      const xp = prev.xp + (first ? 140 : 0);
+      return {...prev, xp, level: 1 + Math.floor(xp / 100), coins: prev.coins + (first ? 50 : 0), unlocked: Math.max(prev.unlocked, 9), completed: first ? [...prev.completed, 8] : prev.completed, inventory: prev.inventory.includes("Anel da Promessa") ? prev.inventory : [...prev.inventory, "Anel da Promessa"]};
     });
   }
 
@@ -715,53 +789,51 @@ export default function Game() {
 
         {selected === 6 && (
           <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.article className="parchment road-parchment" initial={{ scale: .72, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: .72, opacity: 0 }} transition={{ type: "spring", damping: 18 }}>
+            <motion.article className="parchment road-parchment" initial={{ scale: .72, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: .72, opacity: 0 }}>
               <button className="close" onClick={() => { setSelected(null); setRoadMessage(""); }}>×</button>
-              <div className="scroll-title road-title"><span>🏍️</span><div><small>CAPÍTULO VI</small><h2>Estrada das Conquistas</h2><p>Velocidade, coragem e sonhos</p></div><span>🌄</span></div>
-              <div className="story">
-                <p>Ao deixarem o Lago das Memórias, a Chave do Coração ilumina uma estrada escondida entre montanhas. O caminho parece não ter fim, cercado por curvas, túneis e luzes que piscam como estrelas.</p>
-                <p>Diante de vocês aguardam motos lendárias. O pequeno dragão salta para o banco traseiro e abre as asas, pronto para sentir o vento.</p>
-                <p>Uma placa antiga avisa: <em>“Nesta estrada, vencer não significa chegar primeiro. Significa chegar juntos.”</em></p>
-              </div>
+              <div className="scroll-title road-title"><span>🏍️</span><div><small>CAPÍTULO VI</small><h2>Estrada das Conquistas</h2><p>A Oficina Perdida</p></div><span>🔧</span></div>
+              <div className="story"><p>Vocês deixam o Lago das Memórias montados em uma CB 300. A estrada serpenteia entre montanhas, enquanto o pequeno dragão se equilibra no banco e abre as asas contra o vento.</p><p>De repente, o painel pisca, o motor perde força e a CB 300 para diante de uma oficina abandonada. Uma placa enferrujada anuncia: <em>“Somente quem conhece sua máquina e confia em sua dupla seguirá viagem.”</em></p><p>Para consertar a moto, acumular pontos e comprar uma nova máquina, vocês enfrentarão quatro desafios.</p></div>
 
-              <section className="forest-section road-section">
-                <h3>1. Escolham suas máquinas</h3>
-                <div className="weapon-columns">
-                  <ChoiceGroup title="Giselle" value={roadBikeGigi} setValue={setRoadBikeGigi} options={["💙 R3 Azul", "🖤 R1 Negra", "❤️ CB 300"]} />
-                  <ChoiceGroup title="Lucas" value={roadBikeLucas} setValue={setRoadBikeLucas} options={["💙 R3 Azul", "🖤 R1 Negra", "❤️ CB 300"]} />
-                </div>
-              </section>
+              <section className="forest-section road-section"><h3>1. Diagnóstico da CB 300 — até 20 pontos</h3><p>O painel apagou, o motor perdeu força e a moto começou a falhar antes de parar. Qual é a causa mais provável?</p><ChoiceGroup title="Escolham juntos" value={roadDiagnostic} setValue={setRoadDiagnostic} options={["⛽ Falta de combustível", "🔋 Bateria ou sistema elétrico", "⛓️ Corrente frouxa", "🌡️ Superaquecimento"]}/>{roadDiagnostic && <p className="outcome-text">{roadDiagnostic === "🔋 Bateria ou sistema elétrico" ? "Diagnóstico perfeito: 20 pontos. O dragão encontra um cabo solto próximo à bateria." : "Boa tentativa: 10 pontos. O dragão entrega uma pista e conduz vocês até o sistema elétrico."}</p>}</section>
 
-              <div className="chapter-transition road-transition"><span>🏁</span><p>Os motores despertam. A primeira curva surge coberta por névoa, e a tempestade se aproxima. Cada jogador deverá rolar um dado; a soma representa o equilíbrio da dupla na estrada.</p><span>⚡</span></div>
+              <section className="forest-section road-section"><h3>2. Busca pelas peças — até 20 pontos</h3><div className="bridge-rules"><p>1 ou 2: nenhuma peça.</p><p>3 ou 4: uma peça e 5 pontos.</p><p>5 ou 6: duas peças e 10 pontos.</p></div><div className="pirate-dice-row"><button disabled={roadSearchRolls.length >= 2} onClick={rollRoadSearch}>🎲 {roadSearchRolls.length === 0 ? "Giselle procura" : roadSearchRolls.length === 1 ? "Lucas procura" : "Busca concluída"}</button><b>{roadSearchRolls.length ? roadSearchRolls.join(" + ") : "—"}</b></div></section>
 
-              <section className="forest-section road-section">
-                <h3>2. A Curva da Tempestade</h3>
-                <div className="bridge-rules">
-                  <p>✅ <b>Soma 7 ou mais:</b> vocês atravessam a tempestade juntos.</p>
-                  <p>⚠️ <b>Soma 6 ou menos:</b> a estrada fecha e vocês precisam usar um bônus ou cumprir uma prenda.</p>
-                  <p>🎁 Os bônus conquistados podem ser usados aqui, mas cada uso é consumido do Baú da Dupla.</p>
-                </div>
-                <div className="pirate-dice-row"><button disabled={roadRolls.length >= 2} onClick={rollRoadDie}>🎲 {roadRolls.length === 0 ? "Rolagem de Giselle" : roadRolls.length === 1 ? "Rolagem de Lucas" : "Rolagens concluídas"}</button><b>{roadRolls.length ? roadRolls.join(" + ") : "—"}</b></div>
-                {roadRolls.length === 2 && <div className="outcome-text"><b>Soma atual: {roadRolls[0] + roadRolls[1] + (roadDragonBoostUsed ? 1 : 0)}</b><p>{roadRolls[0] + roadRolls[1] + (roadDragonBoostUsed ? 1 : 0) >= 7 || roadMaskUsed ? "A dupla mantém o controle e rompe a tempestade." : "A moto perde estabilidade. Escolham um bônus ou aceitem a prenda do destino."}</p></div>}
-                <div className="bonus-actions">
-                  <button disabled={(state.rerolls ?? 0) < 1 || roadRolls.length === 0 || roadRerollUsed} onClick={useRoadReroll}>🎲 Repetir último dado ({state.rerolls ?? 0})</button>
-                  <button disabled={(state.dragonBoosts ?? 0) < 1 || roadRolls.length < 2 || roadDragonBoostUsed} onClick={useRoadDragonBoost}>🐉 Usar +1 do dragão ({state.dragonBoosts ?? 0})</button>
-                  <button disabled={(state.oniMaskUses ?? 0) < 1 || roadRolls.length < 2 || roadMaskUsed} onClick={useRoadMask}>🎭 Máscara do Oni ({state.oniMaskUses ?? 0})</button>
-                </div>
-              </section>
+              <section className="forest-section road-section"><h3>3. Quiz da Oficina Perdida — até 20 pontos</h3>{[
+                ["Qual destas motos é conhecida por alcançar uma das maiores velocidades em pista?", ["Yamaha R3","Honda CB 300","Kawasaki Ninja H2R","Yamaha MT-03"]],
+                ["O que significa ABS em uma moto?", ["Sistema de aceleração automática","Sistema antitravamento dos freios","Ajuste básico de suspensão","Assistência de bateria"]],
+                ["Para que serve a corrente da moto?", ["Resfriar o motor","Transmitir a força do motor para a roda traseira","Acionar o farol","Controlar o combustível"]],
+                ["Qual destas possui maior cilindrada?", ["MT-03","R3","MT-07","CB 300"]]
+              ].map((question,i)=><div className="quiz-question" key={question[0] as string}><b>{i+1}. {question[0] as string}</b><div>{(question[1] as string[]).map(answer=><button key={answer} className={roadQuizAnswers[i]===answer?"selected-choice":""} onClick={()=>updateRoadQuiz(i,answer)}>{answer}</button>)}</div></div>)}</section>
 
-              <div className="chapter-transition road-transition"><span>🌅</span><p>Depois da tempestade, a estrada se divide. Um caminho é curto e perigoso; o outro é longo, mas permite que vocês contemplem juntos o nascer do sol.</p><span>🌅</span></div>
+              <section className="forest-section road-section"><h3>4. Teste da Estrada — até 30 pontos</h3><div className="bridge-rules"><p>Soma 10–12: 30 pontos.</p><p>Soma 7–9: 25 pontos.</p><p>Soma 4–6: 15 pontos.</p><p>Soma 2–3: 10 pontos.</p><p>Ao concluírem todos os desafios, recebem ainda 10 pontos de parceria.</p></div><div className="pirate-dice-row"><button disabled={roadTestRolls.length >= 2} onClick={rollRoadTest}>🎲 {roadTestRolls.length===0?"Giselle pilota":roadTestRolls.length===1?"Lucas pilota":"Teste concluído"}</button><b>{roadTestRolls.length?roadTestRolls.join(" + "):"—"}</b></div></section>
 
-              <section className="forest-section road-section">
-                <h3>3. A Escolha da Dupla</h3>
-                <ChoiceGroup title="Qual caminho vocês escolhem?" value={roadChoice} setValue={setRoadChoice} options={["⚡ Atalho da Coragem", "🌄 Rota do Amanhecer", "🤝 Seguir lado a lado"]} />
-                {roadChoice && <p className="outcome-text">{roadChoice === "🤝 Seguir lado a lado" ? "A estrada reconhece a sintonia de vocês e transforma os dois caminhos em um só." : "A escolha revela que cada conquista tem valor quando é compartilhada."}</p>}
-                <button className="forest-finish" onClick={finishRoad}>Concluir a Estrada das Conquistas</button>
-              </section>
-
-              {roadMessage && <motion.div className={roadMessage.startsWith("A dupla") ? "result success" : "result fail"} initial={{ scale: .85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}><span>{roadMessage}</span>{roadMessage.startsWith("A dupla") && <div className="memory-reveal"><p><b>Recompensa:</b> Emblema da Liberdade. A Arena do Futebol está disponível no mapa.</p><button className="continue-button" onClick={() => { setSelected(null); setRoadMessage(""); }}>Seguir para a Arena do Futebol →</button></div>}</motion.div>}
+              <section className="forest-section road-shop"><h3>Loja das Máquinas Lendárias</h3><div className="score-orb">{roadScore()} <small>pontos do casal</small></div><div className="bike-shop">{Object.entries(bikePrices).map(([bike,price])=><button key={bike} disabled={roadScore()<price} className={roadPurchasedBike===bike?"selected-bike":""} onClick={()=>setRoadPurchasedBike(bike)}><span>{bike === "R1" ? "🏍️✨" : "🏍️"}</span><b>{bike}</b><small>{price} pontos</small></button>)}</div>{roadPurchasedBike && <p className="outcome-text">Máquina escolhida: <b>{roadPurchasedBike}</b>. Ela será guardada no Baú de Conquistas.</p>}<button className="forest-finish" onClick={finishRoad}>Comprar a moto e concluir a estrada</button></section>
+              {roadMessage && <motion.div className={roadMessage.includes("conquistada") ? "result success" : "result fail"} initial={{scale:.85,opacity:0}} animate={{scale:1,opacity:1}}><span>{roadMessage}</span>{roadMessage.includes("conquistada") && <div className="memory-reveal"><button className="continue-button" onClick={()=>{setSelected(null);setRoadMessage("")}}>Seguir para a Arena do Futebol →</button></div>}</motion.div>}
             </motion.article>
           </motion.div>
+        )}
+
+        {selected === 7 && (
+          <motion.div className="modal-backdrop" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><motion.article className="parchment arena-parchment" initial={{scale:.72,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.72,opacity:0}}>
+            <button className="close" onClick={()=>{setSelected(null);setArenaMessage("")}}>×</button><div className="scroll-title arena-title"><span>⚽</span><div><small>CAPÍTULO VII</small><h2>Arena do Futebol</h2><p>Quando dois jogam como um</p></div><span>🏆</span></div>
+            <div className="story"><p>A nova moto conduz vocês até um estádio escondido entre montanhas. As arquibancadas estão vazias, mas tochas se acendem quando a dupla entra no gramado.</p><p>O Guardião da Arena anuncia: <em>“Talento individual marca gols. Confiança e parceria conquistam campeonatos.”</em></p></div>
+            <section className="forest-section arena-section"><h3>1. Batizem a equipe</h3><input className="team-input" value={arenaTeamName} onChange={e=>setArenaTeamName(e.target.value)} placeholder="Nome da equipe de Lucas & Gigi"/></section>
+            <section className="forest-section arena-section"><h3>2. Desafio dos Cinco Passes</h3><p>Presencialmente, passem uma bola ou objeto leve cinco vezes sem deixar cair. Cada toque deve ser feito alternadamente.</p><button className="mini-action" onClick={()=>setArenaPasses(v=>Math.min(5,v+1))}>{arenaPasses<5?`Confirmar passe ${arenaPasses+1}/5`:"✓ Cinco passes concluídos"}</button></section>
+            <section className="forest-section arena-section"><h3>3. Cobranças do Destino</h3><div className="bridge-rules"><p>1–2: defesa do goleiro; o jogador cumpre uma prenda.</p><p>3–4: gol com dificuldade.</p><p>5–6: golaço e bônus de torcida.</p></div><div className="pirate-dice-row"><button disabled={arenaGoals.length>=2} onClick={rollArenaGoal}>🎲 {arenaGoals.length===0?"Chute de Giselle":arenaGoals.length===1?"Chute de Lucas":"Cobranças concluídas"}</button><b>{arenaGoals.length?arenaGoals.join(" | "):"—"}</b></div></section>
+            <section className="forest-section arena-section"><h3>4. Promessa da Dupla</h3><p>Cada um deve dizer uma atitude que promete ter para sempre jogar no mesmo time do outro.</p><button className="mini-action" onClick={()=>setArenaPromise(true)}>{arenaPromise?"✓ Promessas feitas":"Fizemos nossas promessas"}</button><button className="forest-finish" onClick={finishArena}>Encerrar a partida</button></section>
+            {arenaMessage && <motion.div className={arenaMessage.startsWith("Vitória")?"result success":"result fail"} initial={{scale:.85,opacity:0}} animate={{scale:1,opacity:1}}><span>{arenaMessage}</span>{arenaMessage.startsWith("Vitória")&&<div className="memory-reveal"><p>Recompensa: Troféu da Sintonia.</p><button className="continue-button" onClick={()=>{setSelected(null);setArenaMessage("")}}>Seguir para o Castelo do Destino →</button></div>}</motion.div>}
+          </motion.article></motion.div>
+        )}
+
+        {selected === 8 && (
+          <motion.div className="modal-backdrop" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><motion.article className="parchment castle-parchment" initial={{scale:.72,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.72,opacity:0}}>
+            <button className="close" onClick={()=>{setSelected(null);setCastleMessage("")}}>×</button><div className="scroll-title castle-title"><span>🏰</span><div><small>CAPÍTULO VIII</small><h2>Castelo do Destino</h2><p>O último portão</p></div><span>💍</span></div>
+            <div className="story"><p>Com o Troféu da Sintonia em mãos, vocês chegam ao castelo que guarda o caminho para o tesouro. O portão não possui fechadura comum: ele reconhece todas as escolhas feitas durante a aventura.</p><p>Uma voz ecoa: <em>“Antes de receberem o destino, provem que conseguem caminhar unidos mesmo quando o tempo é curto.”</em></p></div>
+            <section className="forest-section castle-section"><h3>1. Desafio presencial — União em 15 segundos</h3><p>Coloquem uma moeda entre as testas. Sem usar as mãos, caminhem juntos durante 15 segundos sem deixá-la cair.</p><div className="castle-timer">00:{String(castleTimer).padStart(2,"0")}</div><button className="mini-action" disabled={castleChallengeComplete} onClick={()=>{setCastleTimer(15);setCastleRunning(true)}}>{castleRunning?"Permaneçam unidos...":castleChallengeComplete?"✓ Desafio concluído":"Iniciar cronômetro"}</button></section>
+            <section className="forest-section castle-section"><h3>2. As Chaves da Jornada</h3><p>Qual conquista vocês erguem diante do portão?</p><ChoiceGroup title="Escolham um símbolo" value={castleGateChoice} setValue={setCastleGateChoice} options={["🗝️ Chave Dourada","💗 Chave do Coração","🏆 Troféu da Sintonia","🏍️ Emblema da Liberdade"]}/><p className="outcome-text">Não existe escolha errada. O castelo quer saber qual lembrança representa melhor a força de vocês.</p></section>
+            <section className="forest-section castle-section"><h3>3. O Portão do Destino</h3><div className="bridge-rules"><p>Cada um rola um dado. A soma precisa ser 6 ou mais.</p><p>Se a soma for menor, cumpram uma prenda e tentem novamente.</p></div><div className="pirate-dice-row"><button disabled={castleRolls.length>=2} onClick={rollCastleDie}>🎲 {castleRolls.length===0?"Giselle toca o portão":castleRolls.length===1?"Lucas toca o portão":"Destino revelado"}</button><b>{castleRolls.length?castleRolls.join(" + "):"—"}</b></div><button className="forest-finish" onClick={finishCastle}>Abrir o Castelo do Destino</button></section>
+            {castleMessage && <motion.div className={castleMessage.startsWith("Os portões")?"result success":"result fail"} initial={{scale:.85,opacity:0}} animate={{scale:1,opacity:1}}><span>{castleMessage}</span>{castleMessage.startsWith("Os portões")&&<div className="memory-reveal"><p><b>Recompensa desbloqueada: Anel da Promessa.</b></p><p><em>“O verdadeiro destino não é o lugar onde vocês chegam, mas a escolha de continuar caminhando juntos.”</em></p><button className="continue-button" onClick={()=>{setSelected(null);setCastleMessage("")}}>O Tesouro Final está desbloqueado →</button></div>}</motion.div>}
+          </motion.article></motion.div>
         )}
 
         {showDice && (
