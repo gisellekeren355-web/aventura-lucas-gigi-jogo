@@ -13,6 +13,7 @@ type GameState = {
   rerolls?: number;
   dragonBoosts?: number;
   oniMaskUses?: number;
+  heartKeyUses?: number;
 };
 
 const initialState: GameState = {
@@ -24,7 +25,8 @@ const initialState: GameState = {
   inventory: ["Mapa do Tesouro"],
   rerolls: 0,
   dragonBoosts: 0,
-  oniMaskUses: 0
+  oniMaskUses: 0,
+  heartKeyUses: 0
 };
 
 const regions = [
@@ -93,6 +95,16 @@ export default function Game() {
   const [lakeMemoryTwo, setLakeMemoryTwo] = useState(false);
   const [lakeMemoryThree, setLakeMemoryThree] = useState(false);
   const [lakeMessage, setLakeMessage] = useState("");
+  const [roadBikeGigi, setRoadBikeGigi] = useState("");
+  const [roadBikeLucas, setRoadBikeLucas] = useState("");
+  const [roadRolls, setRoadRolls] = useState<number[]>([]);
+  const [roadChoice, setRoadChoice] = useState("");
+  const [roadMessage, setRoadMessage] = useState("");
+  const [roadDragonBoostUsed, setRoadDragonBoostUsed] = useState(false);
+  const [roadRerollUsed, setRoadRerollUsed] = useState(false);
+  const [roadMaskUsed, setRoadMaskUsed] = useState(false);
+  const [reflexPenaltiesPending, setReflexPenaltiesPending] = useState(0);
+  const [diceContext, setDiceContext] = useState<"village" | "reflex" | "road" | null>(null);
   const [state, setState] = useGameState();
   const audioRef = useRef<AudioContext | null>(null);
 
@@ -148,7 +160,7 @@ export default function Game() {
     } else {
       chime(150, 0.4);
       setMessage("Resposta errada. O Dado do Destino foi despertado...");
-      setTimeout(() => setShowDice(true), 700);
+      setTimeout(() => { setDiceContext("village"); setShowDice(true); }, 700);
     }
   }
 
@@ -217,13 +229,19 @@ export default function Game() {
   function rollHunterDie(target: "reflex" | "oni") {
     const result = 1 + Math.floor(Math.random() * 6);
     chime(result >= 5 ? 720 : result >= 3 ? 500 : 180, .3);
-    if (target === "reflex") setReflexRolls(prev => [...prev, result].slice(-2));
-    else setOniRolls(prev => [...prev, result].slice(-2));
+    if (target === "reflex") {
+      setReflexRolls(prev => [...prev, result].slice(-2));
+      if (result <= 2) {
+        setReflexPenaltiesPending(prev => prev + 1);
+        setDiceContext("reflex");
+        setTimeout(() => setShowDice(true), 450);
+      }
+    } else setOniRolls(prev => [...prev, result].slice(-2));
   }
 
   function finishHunters() {
-    if (!hunterStyleGigi || !hunterStyleLucas || reflexRolls.length < 2 || !trustComplete || oniRolls.length < 2) {
-      setHunterMessage("Concluam os estilos, os testes e a batalha contra o Oni antes de seguir.");
+    if (!hunterStyleGigi || !hunterStyleLucas || reflexRolls.length < 2 || reflexPenaltiesPending > 0 || !trustComplete || oniRolls.length < 2) {
+      setHunterMessage(reflexPenaltiesPending > 0 ? "Cumpram e confirmem todas as prendas do Teste de Reflexos antes de seguir." : "Concluam os estilos, os testes e a batalha contra o Oni antes de seguir.");
       chime(160, .3);
       return;
     }
@@ -273,9 +291,78 @@ export default function Game() {
         unlocked: Math.max(prev.unlocked, 6),
         completed: first ? [...prev.completed, 5] : prev.completed,
         rerolls: (prev.rerolls ?? 0) + (first ? 1 : 0),
+        heartKeyUses: (prev.heartKeyUses ?? 0) + (first ? 1 : 0),
         inventory: [...prev.inventory, ...rewards.filter(item => !prev.inventory.includes(item))]
       };
     });
+  }
+
+  function rollRoadDie() {
+    const result = 1 + Math.floor(Math.random() * 6);
+    setRoadRolls(prev => [...prev, result].slice(-2));
+    chime(result >= 5 ? 760 : result >= 3 ? 520 : 180, .3);
+  }
+
+  function useRoadReroll() {
+    if ((state.rerolls ?? 0) < 1 || roadRolls.length === 0 || roadRerollUsed) return;
+    const result = 1 + Math.floor(Math.random() * 6);
+    setRoadRolls(prev => [...prev.slice(0, -1), result]);
+    setRoadRerollUsed(true);
+    setState(prev => ({ ...prev, rerolls: Math.max(0, (prev.rerolls ?? 0) - 1) }));
+    chime(700, .35);
+  }
+
+  function useRoadDragonBoost() {
+    if ((state.dragonBoosts ?? 0) < 1 || roadRolls.length < 2 || roadDragonBoostUsed) return;
+    setRoadDragonBoostUsed(true);
+    setState(prev => ({ ...prev, dragonBoosts: Math.max(0, (prev.dragonBoosts ?? 0) - 1) }));
+    chime(760, .35);
+  }
+
+  function useRoadMask() {
+    if ((state.oniMaskUses ?? 0) < 1 || roadRolls.length < 2 || roadMaskUsed) return;
+    setRoadMaskUsed(true);
+    setState(prev => ({ ...prev, oniMaskUses: Math.max(0, (prev.oniMaskUses ?? 0) - 1) }));
+    chime(820, .35);
+  }
+
+  function finishRoad() {
+    if (!roadBikeGigi || !roadBikeLucas || roadRolls.length < 2 || !roadChoice) {
+      setRoadMessage("Escolham as motos, concluam as duas rolagens e tomem a decisão final da estrada.");
+      chime(160, .3);
+      return;
+    }
+    const total = roadRolls[0] + roadRolls[1] + (roadDragonBoostUsed ? 1 : 0);
+    const success = total >= 7 || roadMaskUsed;
+    if (!success) {
+      setRoadMessage("A tempestade fechou a estrada. Usem um bônus disponível ou cumpram uma prenda e tentem novamente.");
+      setDiceContext("road");
+      setShowDice(true);
+      chime(160, .35);
+      return;
+    }
+    chime(900, .55);
+    setRoadMessage("A dupla cruzou a Estrada das Conquistas! O Emblema da Liberdade foi conquistado e a Arena do Futebol está desbloqueada.");
+    setState(prev => {
+      const first = !prev.completed.includes(6);
+      const xp = prev.xp + (first ? 120 : 0);
+      return {
+        ...prev,
+        xp,
+        level: 1 + Math.floor(xp / 100),
+        coins: prev.coins + (first ? 35 : 0),
+        unlocked: Math.max(prev.unlocked, 7),
+        completed: first ? [...prev.completed, 6] : prev.completed,
+        inventory: prev.inventory.includes("Emblema da Liberdade") ? prev.inventory : [...prev.inventory, "Emblema da Liberdade"]
+      };
+    });
+  }
+
+  function confirmPenalty() {
+    if (diceContext === "reflex") setReflexPenaltiesPending(prev => Math.max(0, prev - 1));
+    setShowDice(false);
+    setDiceContext(null);
+    chime(520, .25);
   }
 
   function rollDice() {
@@ -452,7 +539,7 @@ export default function Game() {
               <div className="scroll-title pirate-title"><span>🏴‍☠️</span><div><small>CAPÍTULO III</small><h2>A Ilha dos Piratas</h2><p>Coragem, escolhas e destino</p></div><span>🧭</span></div>
               <div className="story">
                 <p>Após atravessarem a Floresta Jurássica, Lucas, Giselle e o pequeno dragão finalmente chegam ao litoral.</p>
-                <p>Um enorme navio de velas negras se aproxima da praia. Seu capitão desce do convés, observa as armas conquistadas e entrega a vocês um antigo mapa incompleto.</p>
+                <p>Um enorme navio de velas negras se aproxima da praia. Seu capitão desce do convés, observa as armas conquistadas e entrega a vocês um antigo mapa incompleto.</p><p>Quando percebe o pequeno dragão ao lado da dupla, ele ergue uma sobrancelha e solta um sorriso: <em>“Hm… interessante. Vocês sobreviveram à floresta e ainda conquistaram a confiança de um dragão. São mais fortes do que parecem.”</em></p>
                 <p><em>“Somente aqueles guiados por suas escolhas e pelo destino encontrarão o verdadeiro tesouro.”</em></p>
               </div>
 
@@ -478,7 +565,13 @@ export default function Game() {
 
               <section className="forest-section pirate-section">
                 <h3>2. A Ponte da Selva Perdida</h3>
-                <p>Cada aventureiro deverá rolar o dado uma vez.</p>
+                <p>Antes de rolar, observem a regra da travessia:</p>
+                <div className="bridge-rules">
+                  <p>✅ <b>Ambos tiram 3 ou mais:</b> atravessam a ponte em segurança.</p>
+                  <p>🤝 <b>Apenas um falha:</b> o outro aventureiro poderá salvá-lo.</p>
+                  <p>❌ <b>Ambos falham:</b> a ponte desmorona e uma rota alternativa será aberta.</p>
+                </div>
+                <p>Agora, cada aventureiro deverá rolar o dado uma vez.</p>
                 <div className="pirate-dice-row">
                   <button onClick={() => rollPirateDie("bridge")} disabled={bridgeRolls.length >= 2}>🎲 {bridgeRolls.length === 0 ? "Rolagem de Giselle" : bridgeRolls.length === 1 ? "Rolagem de Lucas" : "Rolagens concluídas"}</button>
                   <b>{bridgeRolls.length ? bridgeRolls.join(" + ") : "—"}</b>
@@ -540,7 +633,7 @@ export default function Game() {
                 <h3>1. Teste de Reflexos</h3>
                 <p>Cada jogador deverá rolar o Dado do Destino uma vez.</p>
                 <div className="pirate-dice-row"><button disabled={reflexRolls.length >= 2} onClick={() => rollHunterDie("reflex")}>🎲 {reflexRolls.length === 0 ? "Rolagem de Giselle" : reflexRolls.length === 1 ? "Rolagem de Lucas" : "Teste concluído"}</button><b>{reflexRolls.length ? reflexRolls.join(" + ") : "—"}</b></div>
-                {reflexRolls.length === 2 && <div className="outcome-text"><p>1 ou 2: o alvo acerta o jogador e ele cumpre uma prenda.</p><p>3 ou 4: consegue desviar.</p><p>5 ou 6: desvia e destrói o alvo com sua habilidade.</p><b>Resultados: Giselle {reflexRolls[0]} | Lucas {reflexRolls[1]}</b></div>}
+                {reflexRolls.length === 2 && <div className="outcome-text"><p>1 ou 2: o alvo acerta o jogador e ele cumpre uma prenda.</p><p>3 ou 4: consegue desviar.</p><p>5 ou 6: desvia e destrói o alvo com sua habilidade.</p><b>Resultados: Giselle {reflexRolls[0]} | Lucas {reflexRolls[1]}</b>{reflexPenaltiesPending > 0 && <p className="pending-warning">Prendas pendentes: {reflexPenaltiesPending}. Cumpram todas antes de continuar.</p>}</div>}
               </section>
 
               <div className="chapter-transition hunter-transition"><span>💞</span><p>Depois dos alvos, o mestre apaga todas as lanternas. Agora não basta enxergar: vocês precisam confiar na voz um do outro.</p><span>💞</span></div>
@@ -619,12 +712,64 @@ export default function Game() {
           </motion.div>
         )}
 
+
+        {selected === 6 && (
+          <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.article className="parchment road-parchment" initial={{ scale: .72, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: .72, opacity: 0 }} transition={{ type: "spring", damping: 18 }}>
+              <button className="close" onClick={() => { setSelected(null); setRoadMessage(""); }}>×</button>
+              <div className="scroll-title road-title"><span>🏍️</span><div><small>CAPÍTULO VI</small><h2>Estrada das Conquistas</h2><p>Velocidade, coragem e sonhos</p></div><span>🌄</span></div>
+              <div className="story">
+                <p>Ao deixarem o Lago das Memórias, a Chave do Coração ilumina uma estrada escondida entre montanhas. O caminho parece não ter fim, cercado por curvas, túneis e luzes que piscam como estrelas.</p>
+                <p>Diante de vocês aguardam motos lendárias. O pequeno dragão salta para o banco traseiro e abre as asas, pronto para sentir o vento.</p>
+                <p>Uma placa antiga avisa: <em>“Nesta estrada, vencer não significa chegar primeiro. Significa chegar juntos.”</em></p>
+              </div>
+
+              <section className="forest-section road-section">
+                <h3>1. Escolham suas máquinas</h3>
+                <div className="weapon-columns">
+                  <ChoiceGroup title="Giselle" value={roadBikeGigi} setValue={setRoadBikeGigi} options={["💙 R3 Azul", "🖤 R1 Negra", "❤️ CB 300"]} />
+                  <ChoiceGroup title="Lucas" value={roadBikeLucas} setValue={setRoadBikeLucas} options={["💙 R3 Azul", "🖤 R1 Negra", "❤️ CB 300"]} />
+                </div>
+              </section>
+
+              <div className="chapter-transition road-transition"><span>🏁</span><p>Os motores despertam. A primeira curva surge coberta por névoa, e a tempestade se aproxima. Cada jogador deverá rolar um dado; a soma representa o equilíbrio da dupla na estrada.</p><span>⚡</span></div>
+
+              <section className="forest-section road-section">
+                <h3>2. A Curva da Tempestade</h3>
+                <div className="bridge-rules">
+                  <p>✅ <b>Soma 7 ou mais:</b> vocês atravessam a tempestade juntos.</p>
+                  <p>⚠️ <b>Soma 6 ou menos:</b> a estrada fecha e vocês precisam usar um bônus ou cumprir uma prenda.</p>
+                  <p>🎁 Os bônus conquistados podem ser usados aqui, mas cada uso é consumido do Baú da Dupla.</p>
+                </div>
+                <div className="pirate-dice-row"><button disabled={roadRolls.length >= 2} onClick={rollRoadDie}>🎲 {roadRolls.length === 0 ? "Rolagem de Giselle" : roadRolls.length === 1 ? "Rolagem de Lucas" : "Rolagens concluídas"}</button><b>{roadRolls.length ? roadRolls.join(" + ") : "—"}</b></div>
+                {roadRolls.length === 2 && <div className="outcome-text"><b>Soma atual: {roadRolls[0] + roadRolls[1] + (roadDragonBoostUsed ? 1 : 0)}</b><p>{roadRolls[0] + roadRolls[1] + (roadDragonBoostUsed ? 1 : 0) >= 7 || roadMaskUsed ? "A dupla mantém o controle e rompe a tempestade." : "A moto perde estabilidade. Escolham um bônus ou aceitem a prenda do destino."}</p></div>}
+                <div className="bonus-actions">
+                  <button disabled={(state.rerolls ?? 0) < 1 || roadRolls.length === 0 || roadRerollUsed} onClick={useRoadReroll}>🎲 Repetir último dado ({state.rerolls ?? 0})</button>
+                  <button disabled={(state.dragonBoosts ?? 0) < 1 || roadRolls.length < 2 || roadDragonBoostUsed} onClick={useRoadDragonBoost}>🐉 Usar +1 do dragão ({state.dragonBoosts ?? 0})</button>
+                  <button disabled={(state.oniMaskUses ?? 0) < 1 || roadRolls.length < 2 || roadMaskUsed} onClick={useRoadMask}>🎭 Máscara do Oni ({state.oniMaskUses ?? 0})</button>
+                </div>
+              </section>
+
+              <div className="chapter-transition road-transition"><span>🌅</span><p>Depois da tempestade, a estrada se divide. Um caminho é curto e perigoso; o outro é longo, mas permite que vocês contemplem juntos o nascer do sol.</p><span>🌅</span></div>
+
+              <section className="forest-section road-section">
+                <h3>3. A Escolha da Dupla</h3>
+                <ChoiceGroup title="Qual caminho vocês escolhem?" value={roadChoice} setValue={setRoadChoice} options={["⚡ Atalho da Coragem", "🌄 Rota do Amanhecer", "🤝 Seguir lado a lado"]} />
+                {roadChoice && <p className="outcome-text">{roadChoice === "🤝 Seguir lado a lado" ? "A estrada reconhece a sintonia de vocês e transforma os dois caminhos em um só." : "A escolha revela que cada conquista tem valor quando é compartilhada."}</p>}
+                <button className="forest-finish" onClick={finishRoad}>Concluir a Estrada das Conquistas</button>
+              </section>
+
+              {roadMessage && <motion.div className={roadMessage.startsWith("A dupla") ? "result success" : "result fail"} initial={{ scale: .85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}><span>{roadMessage}</span>{roadMessage.startsWith("A dupla") && <div className="memory-reveal"><p><b>Recompensa:</b> Emblema da Liberdade. A Arena do Futebol está disponível no mapa.</p><button className="continue-button" onClick={() => { setSelected(null); setRoadMessage(""); }}>Seguir para a Arena do Futebol →</button></div>}</motion.div>}
+            </motion.article>
+          </motion.div>
+        )}
+
         {showDice && (
           <motion.div className="modal-backdrop dice-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.article className="dice-panel" initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
               <button className="close" onClick={() => setShowDice(false)}>×</button>
               <small>AS PROVAÇÕES DA AVENTURA</small><h2>Dado do Destino</h2>
-              <p>Nem toda batalha se vence com espada. Lance o D6 e aceite o que o destino escolher.</p>
+              <p>{diceContext === "reflex" ? "Um dos jogadores foi atingido no Teste de Reflexos. Role a prenda e cumpra-a pessoalmente antes de continuar." : diceContext === "road" ? "A tempestade venceu esta tentativa. Cumpram a prenda para poder tentar a estrada novamente." : "Nem toda batalha se vence com espada. Lance o D6 e aceite o que o destino escolher."}</p>
               <div className={`dice3d ${rolling ? "rolling" : ""}`}><div className="dice-face">{dice}</div></div>
               <button className="roll-button" onClick={rollDice} disabled={rolling}>{rolling ? "O destino está girando..." : "Lançar o dado"}</button>
               {!rolling && <div className="penalty"><b>Resultado {dice}</b><span>{[
@@ -635,6 +780,7 @@ export default function Game() {
                 "Diga o que acha que te cativou no seu parceiro.",
                 "Crítico natural! Você está livre e escolhe uma prenda para o parceiro."
               ][dice - 1]}</span></div>}
+              {!rolling && diceContext && <button className="continue-button" onClick={confirmPenalty}>Confirmamos que a prenda foi cumprida</button>}
             </motion.article>
           </motion.div>
         )}
@@ -644,7 +790,7 @@ export default function Game() {
             <motion.article className="inventory-panel" initial={{ x: 250 }} animate={{ x: 0 }} exit={{ x: 250 }}>
               <button className="close" onClick={() => setInventoryOpen(false)}>×</button>
               <h2>Baú de Conquistas</h2><p>Tudo o que vocês conquistaram e ainda podem usar durante a jornada.</p>
-              <div className="resource-strip"><span>🎲 Repetições: <b>{state.rerolls ?? 0}</b></span><span>🐉 Ajuda do Dragão: <b>{state.dragonBoosts ?? 0}</b></span><span>🎭 Máscara do Oni: <b>{state.oniMaskUses ?? 0}</b></span></div>
+              <div className="resource-strip"><span>🎲 Repetições: <b>{state.rerolls ?? 0}</b></span><span>🐉 Ajuda do Dragão: <b>{state.dragonBoosts ?? 0}</b></span><span>🎭 Máscara do Oni: <b>{state.oniMaskUses ?? 0}</b></span><span>🗝️ Chave do Coração: <b>{state.heartKeyUses ?? 0}</b></span></div>
               <div className="inventory-grid">{state.inventory.map((item, i) => <div key={item}><span>{["🗺️","💬","🗝️","💎","🎭","💍"][i % 6]}</span><b>{item}</b><small>{item === "Ajuda do Dragão" ? "+1 em uma batalha" : item === "Máscara do Oni" ? "Transforma falha em sucesso parcial" : item === "Bônus do Dragão" ? "Permite repetir um dado" : item === "Chave do Coração" ? "Cancela penalidade ou repete tentativa" : "Conquista da aventura"}</small></div>)}</div>
             </motion.article>
           </motion.div>
