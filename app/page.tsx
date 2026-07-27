@@ -99,6 +99,12 @@ export default function Game() {
     }
   }
 
+  function continueJourney() {
+    chime(560, 0.25);
+    setSelected(null);
+    setMessage("");
+  }
+
   function rollDice() {
     setRolling(true);
     chime(220, 0.6);
@@ -182,9 +188,12 @@ export default function Game() {
               </div>
               <div className="elder-hint"><div className="elder">🧙‍♂️</div><div><b>Dica do Ancião da Vila</b><p>“As memórias deste acontecimento estão escondidas em um vídeo caótico...”</p><small>Um grupo de homens fazendo algo tão perigoso quanto engraçado.</small></div></div>
               <div className="question"><h3>Qual foi o primeiro comentário de Giselle que chamou a atenção de Lucas?</h3>
-                {["Pesou, pesou o clima.", "Tinha que ser homi, odeio todos.", "Por isso, nós mulheres pretas somos as mais mais."].map((answer, i) => <button key={answer} onClick={() => chooseAnswer(i)}><span>{String.fromCharCode(65+i)}</span>{answer}</button>)}
+                {["Pesou, pesou o clima.", "Tinha que ser homis kskks", "Por isso, nós mulheres pretas somos as mais mais."].map((answer, i) => <button key={answer} onClick={() => chooseAnswer(i)}><span>{String.fromCharCode(65+i)}</span>{answer}</button>)}
               </div>
-              {message && <motion.div className={message.startsWith("Memória") ? "result success" : "result fail"} initial={{ scale: .8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>{message}</motion.div>}
+              {message && <motion.div className={message.startsWith("Memória") ? "result success" : "result fail"} initial={{ scale: .8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+                <span>{message}</span>
+                {message.startsWith("Memória") && <button className="continue-button" onClick={continueJourney}>Continuar jornada →</button>}
+              </motion.div>}
             </motion.article>
           </motion.div>
         )}
