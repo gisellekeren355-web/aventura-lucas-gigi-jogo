@@ -12,3 +12,25 @@
 @media(max-width:900px){.memory-grid{grid-template-columns:1fr}.memory-card{min-height:auto}.resource-strip{align-items:stretch;flex-direction:column}}
 
 .bridge-rules{margin:14px 0;padding:14px 18px;border:1px solid #a47a3e;background:rgba(255,245,205,.62);text-align:left}.bridge-rules p{margin:8px 0}.pending-warning{padding:10px;border:1px solid #8f2525;background:#f4d3c8;color:#6f1515;font-weight:700}.road-parchment{background:linear-gradient(rgba(239,209,145,.93),rgba(223,180,104,.94)),url('/assets/world-map.png') center/cover}.road-title{background:linear-gradient(90deg,#29150d,#7e321c,#29150d);color:#ffe3a4}.road-transition{background:linear-gradient(90deg,transparent,rgba(99,39,21,.16),transparent)}.road-section{border-color:#8e4e27}.bonus-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:14px 0}.bonus-actions button{border:1px solid #70401e;background:#4a1e2d;color:#f8df9d;padding:10px 13px;font-family:inherit;font-weight:700;cursor:pointer}.bonus-actions button:disabled{opacity:.42;cursor:not-allowed}
+
+/* Fases 6, 7 e 8 */
+.quiz-question{margin:14px 0;padding:14px;border:1px solid #92632f;background:rgba(255,244,205,.72)}
+.quiz-question>b{display:block;margin-bottom:10px;color:#4b2436}
+.quiz-question>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.quiz-question button{padding:10px;border:1px solid #80542c;background:#d8bb7d;color:#2b1810;cursor:pointer}
+.quiz-question button.selected-choice{background:#54203e;color:#ffe6a8;border-color:#d4a14d}
+.road-shop{text-align:center;background:linear-gradient(135deg,rgba(255,231,168,.9),rgba(196,137,63,.35))}
+.score-orb{width:145px;height:145px;margin:12px auto 20px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle,#ffe8a2,#8d3d22 72%);border:5px double #4b2015;color:#35160e;font:800 2.4rem 'Cinzel';box-shadow:0 0 28px rgba(255,188,61,.55)}
+.score-orb small{font-size:.62rem;margin-top:4px}
+.bike-shop{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.bike-shop button{min-height:135px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;border:2px solid #79451f;background:#d9bb78;color:#2d170d;cursor:pointer}
+.bike-shop button:disabled{filter:grayscale(1);opacity:.42;cursor:not-allowed}
+.bike-shop button.selected-bike{background:#4a1937;color:#ffe2a4;border-color:#e5b34f;box-shadow:0 0 18px rgba(99,29,72,.55)}
+.bike-shop span{font-size:2rem}.bike-shop b{font:800 1.05rem 'Cinzel'}
+.arena-parchment{background:linear-gradient(rgba(231,205,143,.94),rgba(207,168,93,.96)),radial-gradient(circle at 50% 20%,#4c7b45,#182515)}
+.arena-title{background:linear-gradient(90deg,#142814,#326331,#142814);color:#f8e9af}
+.arena-section{border-color:#4d6b32}.team-input{display:block;width:min(560px,100%);margin:10px auto;padding:13px;text-align:center;background:#f7e5b8;border:2px solid #5c672f;font:700 1rem 'Libre Baskerville'}
+.castle-parchment{background:linear-gradient(rgba(224,197,132,.95),rgba(177,134,68,.96)),radial-gradient(circle at 50% 0,#3d264f,#120b17)}
+.castle-title{background:linear-gradient(90deg,#1b1123,#593568,#1b1123);color:#f7dfa5}
+.castle-section{border-color:#5d3e64}.castle-timer{margin:14px auto;width:145px;padding:16px;border:3px double #6b3e57;background:#24121f;color:#f6ce75;text-align:center;font:800 2rem 'Cinzel';box-shadow:0 0 18px rgba(109,50,93,.45)}
+@media(max-width:800px){.quiz-question>div{grid-template-columns:1fr}.bike-shop{grid-template-columns:1fr 1fr}.score-orb{width:115px;height:115px;font-size:1.8rem}}
