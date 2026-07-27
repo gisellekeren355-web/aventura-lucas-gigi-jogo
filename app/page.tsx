@@ -112,6 +112,13 @@ export default function Game() {
   const [arenaPasses, setArenaPasses] = useState(0);
   const [arenaGoals, setArenaGoals] = useState<number[]>([]);
   const [arenaPromise, setArenaPromise] = useState(false);
+  const [arenaScoreGigi, setArenaScoreGigi] = useState(0);
+  const [arenaScoreLucas, setArenaScoreLucas] = useState(0);
+  const [arenaShooter, setArenaShooter] = useState<"Giselle" | "Lucas">("Giselle");
+  const [arenaTransferGigi, setArenaTransferGigi] = useState("");
+  const [arenaTransferLucas, setArenaTransferLucas] = useState("");
+  const [arenaShotMessage, setArenaShotMessage] = useState("Arraste a bola em direção ao gol.");
+  const goalRef = useRef<HTMLDivElement | null>(null);
   const [arenaMessage, setArenaMessage] = useState("");
   const [castleTimer, setCastleTimer] = useState(15);
   const [castleRunning, setCastleRunning] = useState(false);
@@ -119,8 +126,10 @@ export default function Game() {
   const [castleGateChoice, setCastleGateChoice] = useState("");
   const [castleRolls, setCastleRolls] = useState<number[]>([]);
   const [castleMessage, setCastleMessage] = useState("");
+  const [finalChestOpen, setFinalChestOpen] = useState(false);
+  const [finalLetterOpen, setFinalLetterOpen] = useState(false);
   const [reflexPenaltiesPending, setReflexPenaltiesPending] = useState(0);
-  const [diceContext, setDiceContext] = useState<"village" | "reflex" | "road" | null>(null);
+  const [diceContext, setDiceContext] = useState<"village" | "reflex" | "road" | "arena" | "castle" | null>(null);
   const [state, setState] = useGameState();
   const audioRef = useRef<AudioContext | null>(null);
 
@@ -354,6 +363,17 @@ export default function Game() {
     return diagnostic + search + quiz + test + partnership;
   }
 
+  function roadScoreDetails() {
+    const diagnostic = roadDiagnostic === "🔋 Bateria ou sistema elétrico" ? 20 : roadDiagnostic ? 10 : 0;
+    const search = roadSearchRolls.reduce((sum, roll) => sum + (roll >= 5 ? 10 : roll >= 3 ? 5 : 0), 0);
+    const correct = ["Kawasaki Ninja H2R", "Sistema antitravamento dos freios", "Transmitir a força do motor para a roda traseira", "MT-07"];
+    const quiz = roadQuizAnswers.reduce((sum, answer, i) => sum + (answer === correct[i] ? 5 : 0), 0);
+    const total = roadTestRolls.length === 2 ? roadTestRolls[0] + roadTestRolls[1] : 0;
+    const test = total >= 10 ? 30 : total >= 7 ? 25 : total >= 4 ? 15 : roadTestRolls.length === 2 ? 10 : 0;
+    const partnership = roadDiagnostic && roadSearchRolls.length === 2 && roadQuizAnswers.every(Boolean) && roadTestRolls.length === 2 ? 10 : 0;
+    return { diagnostic, search, quiz, test, partnership, total: diagnostic + search + quiz + test + partnership };
+  }
+
   const bikePrices: Record<string, number> = { "MT-03": 30, "MT-07": 50, "R3": 70, "R1": 100 };
 
   function finishRoad() {
@@ -387,23 +407,43 @@ export default function Game() {
     });
   }
 
+  function kickArenaBall() {
+    const scored = Math.random() > 0.3;
+    if (scored) {
+      if (arenaShooter === "Giselle") setArenaScoreGigi(v => Math.min(3, v + 1));
+      else setArenaScoreLucas(v => Math.min(3, v + 1));
+      setArenaShotMessage(`⚽ GOL de ${arenaShooter}!`);
+      chime(820, .3);
+    } else {
+      setArenaShotMessage(`🧤 O goleiro defendeu o chute de ${arenaShooter}. Tentem novamente!`);
+      chime(180, .3);
+    }
+    setArenaShooter(arenaShooter === "Giselle" ? "Lucas" : "Giselle");
+  }
+
   function rollArenaGoal() {
+    const player = arenaGoals.length === 0 ? "Giselle" : "Lucas";
     const result = 1 + Math.floor(Math.random() * 6);
     setArenaGoals(prev => [...prev, result].slice(-2));
     chime(result >= 5 ? 780 : result >= 3 ? 520 : 180, .3);
+    if (result <= 2) {
+      setArenaShotMessage(`${player} teve o chute defendido. O Dado da Prenda foi despertado.`);
+      setTimeout(() => { setDiceContext("arena"); setShowDice(true); }, 450);
+    }
   }
 
   function finishArena() {
-    if (!arenaTeamName.trim() || arenaPasses < 5 || arenaGoals.length < 2 || !arenaPromise) {
-      setArenaMessage("Concluam o nome da equipe, os cinco passes, as duas cobranças e a promessa da dupla.");
+    if (!arenaTeamName.trim() || arenaScoreGigi < 3 || arenaScoreLucas < 3 || arenaGoals.length < 2 || !arenaTransferGigi || !arenaTransferLucas) {
+      setArenaMessage("Concluam o nome da equipe, os três gols de cada jogador, as duas cobranças e as transferências.");
       chime(160, .3); return;
     }
     chime(860, .5);
-    setArenaMessage("Vitória da dupla! O Troféu da Sintonia foi conquistado e os portões do Castelo do Destino se abriram.");
+    setArenaMessage(`Vitória da dupla! Giselle foi transferida para ${arenaTransferGigi} e Lucas para ${arenaTransferLucas}. O Troféu da Sintonia foi conquistado.`);
     setState(prev => {
       const first = !prev.completed.includes(7);
       const xp = prev.xp + (first ? 125 : 0);
-      return {...prev, xp, level: 1 + Math.floor(xp / 100), coins: prev.coins + (first ? 40 : 0), unlocked: Math.max(prev.unlocked, 8), completed: first ? [...prev.completed, 7] : prev.completed, inventory: prev.inventory.includes("Troféu da Sintonia") ? prev.inventory : [...prev.inventory, "Troféu da Sintonia"]};
+      const items = ["Troféu da Sintonia", `Clube de Giselle: ${arenaTransferGigi}`, `Clube de Lucas: ${arenaTransferLucas}`];
+      return {...prev, xp, level: 1 + Math.floor(xp / 100), coins: prev.coins + (first ? 40 : 0), unlocked: Math.max(prev.unlocked, 8), completed: first ? [...prev.completed, 7] : prev.completed, inventory: [...prev.inventory, ...items.filter(i => !prev.inventory.includes(i))]};
     });
   }
 
@@ -421,7 +461,7 @@ export default function Game() {
     const total = castleRolls[0] + castleRolls[1];
     if (total < 6) {
       setCastleMessage("O portão resistiu. Cumpram uma prenda do Dado do Destino e tentem as rolagens novamente.");
-      setDiceContext("road"); setShowDice(true); chime(160,.3); return;
+      setDiceContext("castle"); setShowDice(true); chime(160,.3); return;
     }
     chime(940,.55);
     setCastleMessage("Os portões se abriram. O Anel da Promessa foi conquistado e o caminho para o Tesouro Final apareceu.");
@@ -434,6 +474,7 @@ export default function Game() {
 
   function confirmPenalty() {
     if (diceContext === "reflex") setReflexPenaltiesPending(prev => Math.max(0, prev - 1));
+    if (diceContext === "castle") { setCastleRolls([]); setCastleMessage("Prenda cumprida. O portão permite uma nova tentativa."); }
     setShowDice(false);
     setDiceContext(null);
     chime(520, .25);
@@ -798,12 +839,14 @@ export default function Game() {
 
               <section className="forest-section road-section"><h3>2. Busca pelas peças — até 20 pontos</h3><div className="bridge-rules"><p>1 ou 2: nenhuma peça.</p><p>3 ou 4: uma peça e 5 pontos.</p><p>5 ou 6: duas peças e 10 pontos.</p></div><div className="pirate-dice-row"><button disabled={roadSearchRolls.length >= 2} onClick={rollRoadSearch}>🎲 {roadSearchRolls.length === 0 ? "Giselle procura" : roadSearchRolls.length === 1 ? "Lucas procura" : "Busca concluída"}</button><b>{roadSearchRolls.length ? roadSearchRolls.join(" + ") : "—"}</b></div></section>
 
-              <section className="forest-section road-section"><h3>3. Quiz da Oficina Perdida — até 20 pontos</h3>{[
-                ["Qual destas motos é conhecida por alcançar uma das maiores velocidades em pista?", ["Yamaha R3","Honda CB 300","Kawasaki Ninja H2R","Yamaha MT-03"]],
-                ["O que significa ABS em uma moto?", ["Sistema de aceleração automática","Sistema antitravamento dos freios","Ajuste básico de suspensão","Assistência de bateria"]],
-                ["Para que serve a corrente da moto?", ["Resfriar o motor","Transmitir a força do motor para a roda traseira","Acionar o farol","Controlar o combustível"]],
-                ["Qual destas possui maior cilindrada?", ["MT-03","R3","MT-07","CB 300"]]
-              ].map((question,i)=><div className="quiz-question" key={question[0] as string}><b>{i+1}. {question[0] as string}</b><div>{(question[1] as string[]).map(answer=><button key={answer} className={roadQuizAnswers[i]===answer?"selected-choice":""} onClick={()=>updateRoadQuiz(i,answer)}>{answer}</button>)}</div></div>)}</section>
+              <section className="forest-section road-section"><h3>3. Quiz da Oficina Perdida — até 20 pontos</h3><p>Escolham uma resposta em cada pergunta. Cada acerto vale 5 pontos.</p>{[
+                ["Qual destas motos é conhecida por alcançar uma das maiores velocidades em pista?", ["Yamaha R3","Honda CB 300","Kawasaki Ninja H2R","Yamaha MT-03"], "Kawasaki Ninja H2R"],
+                ["O que significa ABS em uma moto?", ["Sistema de aceleração automática","Sistema antitravamento dos freios","Ajuste básico de suspensão","Assistência de bateria"], "Sistema antitravamento dos freios"],
+                ["Para que serve a corrente da moto?", ["Resfriar o motor","Transmitir a força do motor para a roda traseira","Acionar o farol","Controlar o combustível"], "Transmitir a força do motor para a roda traseira"],
+                ["Qual destas possui maior cilindrada?", ["MT-03","R3","MT-07","CB 300"], "MT-07"]
+              ].map((question,i)=><div className="quiz-question" key={question[0] as string}><b>{i+1}. {question[0] as string}</b><div>{(question[1] as string[]).map(answer=><button type="button" key={answer} className={roadQuizAnswers[i]===answer?"selected-choice":""} onClick={()=>updateRoadQuiz(i,answer)}>{answer}</button>)}</div>{roadQuizAnswers[i] && <small className={roadQuizAnswers[i]===question[2]?"quiz-correct":"quiz-wrong"}>{roadQuizAnswers[i]===question[2]?"✓ Resposta certa: +5 pontos":"✗ Resposta registrada: 0 pontos"}</small>}</div>)}</section>
+
+              <aside className="road-scoreboard"><h3>Placar da Oficina</h3><div><span>Diagnóstico <b>{roadScoreDetails().diagnostic}/20</b></span><span>Busca pelas peças <b>{roadScoreDetails().search}/20</b></span><span>Quiz <b>{roadScoreDetails().quiz}/20</b></span><span>Teste da estrada <b>{roadScoreDetails().test}/30</b></span><span>Bônus de parceria <b>{roadScoreDetails().partnership}/10</b></span></div><strong>Total: {roadScoreDetails().total}/100 pontos</strong><p>{Object.entries(bikePrices).map(([bike,price]) => `${bike}: ${Math.max(0, price-roadScoreDetails().total)} pts restantes`).join(" • ")}</p></aside>
 
               <section className="forest-section road-section"><h3>4. Teste da Estrada — até 30 pontos</h3><div className="bridge-rules"><p>Soma 10–12: 30 pontos.</p><p>Soma 7–9: 25 pontos.</p><p>Soma 4–6: 15 pontos.</p><p>Soma 2–3: 10 pontos.</p><p>Ao concluírem todos os desafios, recebem ainda 10 pontos de parceria.</p></div><div className="pirate-dice-row"><button disabled={roadTestRolls.length >= 2} onClick={rollRoadTest}>🎲 {roadTestRolls.length===0?"Giselle pilota":roadTestRolls.length===1?"Lucas pilota":"Teste concluído"}</button><b>{roadTestRolls.length?roadTestRolls.join(" + "):"—"}</b></div></section>
 
@@ -818,9 +861,9 @@ export default function Game() {
             <button className="close" onClick={()=>{setSelected(null);setArenaMessage("")}}>×</button><div className="scroll-title arena-title"><span>⚽</span><div><small>CAPÍTULO VII</small><h2>Arena do Futebol</h2><p>Quando dois jogam como um</p></div><span>🏆</span></div>
             <div className="story"><p>A nova moto conduz vocês até um estádio escondido entre montanhas. As arquibancadas estão vazias, mas tochas se acendem quando a dupla entra no gramado.</p><p>O Guardião da Arena anuncia: <em>“Talento individual marca gols. Confiança e parceria conquistam campeonatos.”</em></p></div>
             <section className="forest-section arena-section"><h3>1. Batizem a equipe</h3><input className="team-input" value={arenaTeamName} onChange={e=>setArenaTeamName(e.target.value)} placeholder="Nome da equipe de Lucas & Gigi"/></section>
-            <section className="forest-section arena-section"><h3>2. Desafio dos Cinco Passes</h3><p>Presencialmente, passem uma bola ou objeto leve cinco vezes sem deixar cair. Cada toque deve ser feito alternadamente.</p><button className="mini-action" onClick={()=>setArenaPasses(v=>Math.min(5,v+1))}>{arenaPasses<5?`Confirmar passe ${arenaPasses+1}/5`:"✓ Cinco passes concluídos"}</button></section>
-            <section className="forest-section arena-section"><h3>3. Cobranças do Destino</h3><div className="bridge-rules"><p>1–2: defesa do goleiro; o jogador cumpre uma prenda.</p><p>3–4: gol com dificuldade.</p><p>5–6: golaço e bônus de torcida.</p></div><div className="pirate-dice-row"><button disabled={arenaGoals.length>=2} onClick={rollArenaGoal}>🎲 {arenaGoals.length===0?"Chute de Giselle":arenaGoals.length===1?"Chute de Lucas":"Cobranças concluídas"}</button><b>{arenaGoals.length?arenaGoals.join(" | "):"—"}</b></div></section>
-            <section className="forest-section arena-section"><h3>4. Promessa da Dupla</h3><p>Cada um deve dizer uma atitude que promete ter para sempre jogar no mesmo time do outro.</p><button className="mini-action" onClick={()=>setArenaPromise(true)}>{arenaPromise?"✓ Promessas feitas":"Fizemos nossas promessas"}</button><button className="forest-finish" onClick={finishArena}>Encerrar a partida</button></section>
+            <section className="forest-section arena-section"><h3>2. Desafio dos Gols da Dupla</h3><p>Arrastem a bola em direção ao gol. O goleiro se move e pode defender. Giselle e Lucas precisam marcar <b>3 gols cada</b>, alternando os turnos.</p><div className="soccer-score"><span>Giselle <b>{arenaScoreGigi}/3</b></span><span>Vez de <b>{arenaShooter}</b></span><span>Lucas <b>{arenaScoreLucas}/3</b></span></div><div className="soccer-mini-game" ref={goalRef}><div className="goal-net"></div><div className="moving-keeper">🧤</div><motion.div className="soccer-ball" drag dragConstraints={goalRef} dragElastic={0.15} onDragEnd={kickArenaBall}>⚽</motion.div></div><p className="shot-message">{arenaShotMessage}</p></section>
+            <section className="forest-section arena-section"><h3>3. Cobranças do Destino</h3><div className="bridge-rules"><p>1–2: defesa do goleiro; o jogador cumpre uma prenda.</p><p>3–4: gol com dificuldade.</p><p>5–6: golaço e bônus de torcida.</p></div><div className="pirate-dice-row"><button disabled={arenaGoals.length>=2} onClick={rollArenaGoal}>🎲 {arenaGoals.length===0?"Cobrança de Giselle":arenaGoals.length===1?"Cobrança de Lucas":"Cobranças concluídas"}</button><b>{arenaGoals.length?arenaGoals.join(" | "):"—"}</b></div></section>
+            <section className="forest-section arena-section"><h3>4. Mercado de Transferências</h3><p>Depois da partida, os maiores clubes do reino enviam propostas. Cada jogador escolhe seu novo time.</p><ChoiceGroup title="Transferência de Giselle" value={arenaTransferGigi} setValue={setArenaTransferGigi} options={["Real Madrid","Barcelona","Atlético de Madrid","Santos"]}/><ChoiceGroup title="Transferência de Lucas" value={arenaTransferLucas} setValue={setArenaTransferLucas} options={["Real Madrid","Barcelona","Atlético de Madrid","Santos"]}/><button className="forest-finish" onClick={finishArena}>Encerrar a partida</button></section>
             {arenaMessage && <motion.div className={arenaMessage.startsWith("Vitória")?"result success":"result fail"} initial={{scale:.85,opacity:0}} animate={{scale:1,opacity:1}}><span>{arenaMessage}</span>{arenaMessage.startsWith("Vitória")&&<div className="memory-reveal"><p>Recompensa: Troféu da Sintonia.</p><button className="continue-button" onClick={()=>{setSelected(null);setArenaMessage("")}}>Seguir para o Castelo do Destino →</button></div>}</motion.div>}
           </motion.article></motion.div>
         )}
@@ -829,10 +872,21 @@ export default function Game() {
           <motion.div className="modal-backdrop" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><motion.article className="parchment castle-parchment" initial={{scale:.72,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.72,opacity:0}}>
             <button className="close" onClick={()=>{setSelected(null);setCastleMessage("")}}>×</button><div className="scroll-title castle-title"><span>🏰</span><div><small>CAPÍTULO VIII</small><h2>Castelo do Destino</h2><p>O último portão</p></div><span>💍</span></div>
             <div className="story"><p>Com o Troféu da Sintonia em mãos, vocês chegam ao castelo que guarda o caminho para o tesouro. O portão não possui fechadura comum: ele reconhece todas as escolhas feitas durante a aventura.</p><p>Uma voz ecoa: <em>“Antes de receberem o destino, provem que conseguem caminhar unidos mesmo quando o tempo é curto.”</em></p></div>
-            <section className="forest-section castle-section"><h3>1. Desafio presencial — União em 15 segundos</h3><p>Coloquem uma moeda entre as testas. Sem usar as mãos, caminhem juntos durante 15 segundos sem deixá-la cair.</p><div className="castle-timer">00:{String(castleTimer).padStart(2,"0")}</div><button className="mini-action" disabled={castleChallengeComplete} onClick={()=>{setCastleTimer(15);setCastleRunning(true)}}>{castleRunning?"Permaneçam unidos...":castleChallengeComplete?"✓ Desafio concluído":"Iniciar cronômetro"}</button></section>
-            <section className="forest-section castle-section"><h3>2. As Chaves da Jornada</h3><p>Qual conquista vocês erguem diante do portão?</p><ChoiceGroup title="Escolham um símbolo" value={castleGateChoice} setValue={setCastleGateChoice} options={["🗝️ Chave Dourada","💗 Chave do Coração","🏆 Troféu da Sintonia","🏍️ Emblema da Liberdade"]}/><p className="outcome-text">Não existe escolha errada. O castelo quer saber qual lembrança representa melhor a força de vocês.</p></section>
+            <section className="forest-section castle-section"><h3>1. Desafio presencial — Beijo às Cegas</h3><p>Coloquem vendas nos olhos e, sem usar as mãos para guiar o rosto do outro, tentem dar um selinho. Façam devagar e com cuidado para não baterem a cabeça.</p><div className="castle-timer">00:{String(castleTimer).padStart(2,"0")}</div><button className="mini-action" disabled={castleChallengeComplete} onClick={()=>{setCastleTimer(10);setCastleRunning(true)}}>{castleRunning?"Aproximem-se com cuidado...":castleChallengeComplete?"✓ Selinho concluído":"Iniciar contagem de 10 segundos"}</button></section>
+            <section className="forest-section castle-section"><h3>2. As Chaves da Jornada</h3><p>Diante do portão, quatro símbolos conquistados durante a aventura começam a brilhar. Cada um representa uma parte da história de vocês.</p><div className="key-meanings"><p><b>🗝️ Chave Dourada:</b> a chave que abriu novos caminhos e mostrou que juntos vocês sempre encontram uma saída.</p><p><b>💗 Chave do Coração:</b> o amor, o carinho e as memórias que mantêm vocês conectados.</p><p><b>🏆 Troféu da Sintonia:</b> a prova de que vocês sabem jogar no mesmo time e comemorar juntos.</p><p><b>🏍️ Emblema da Liberdade:</b> os sonhos e as estradas que ainda querem percorrer lado a lado.</p></div><ChoiceGroup title="Escolham o símbolo que melhor representa a força da dupla" value={castleGateChoice} setValue={setCastleGateChoice} options={["🗝️ Chave Dourada","💗 Chave do Coração","🏆 Troféu da Sintonia","🏍️ Emblema da Liberdade"]}/><p className="outcome-text">Não existe escolha errada. O castelo quer conhecer a lembrança mais poderosa de vocês.</p></section>
             <section className="forest-section castle-section"><h3>3. O Portão do Destino</h3><div className="bridge-rules"><p>Cada um rola um dado. A soma precisa ser 6 ou mais.</p><p>Se a soma for menor, cumpram uma prenda e tentem novamente.</p></div><div className="pirate-dice-row"><button disabled={castleRolls.length>=2} onClick={rollCastleDie}>🎲 {castleRolls.length===0?"Giselle toca o portão":castleRolls.length===1?"Lucas toca o portão":"Destino revelado"}</button><b>{castleRolls.length?castleRolls.join(" + "):"—"}</b></div><button className="forest-finish" onClick={finishCastle}>Abrir o Castelo do Destino</button></section>
             {castleMessage && <motion.div className={castleMessage.startsWith("Os portões")?"result success":"result fail"} initial={{scale:.85,opacity:0}} animate={{scale:1,opacity:1}}><span>{castleMessage}</span>{castleMessage.startsWith("Os portões")&&<div className="memory-reveal"><p><b>Recompensa desbloqueada: Anel da Promessa.</b></p><p><em>“O verdadeiro destino não é o lugar onde vocês chegam, mas a escolha de continuar caminhando juntos.”</em></p><button className="continue-button" onClick={()=>{setSelected(null);setCastleMessage("")}}>O Tesouro Final está desbloqueado →</button></div>}</motion.div>}
+          </motion.article></motion.div>
+        )}
+
+        {selected === 9 && (
+          <motion.div className="modal-backdrop" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><motion.article className="parchment final-parchment" initial={{scale:.72,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.72,opacity:0}}>
+            <button className="close" onClick={()=>setSelected(null)}>×</button><div className="scroll-title final-title"><span>💎</span><div><small>CAPÍTULO FINAL</small><h2>O Tesouro Final</h2><p>O verdadeiro prêmio da jornada</p></div><span>❤️</span></div>
+            <div className="story"><p>As portas do último salão se abrem. Todos os símbolos conquistados flutuam ao redor de vocês, enquanto o pequeno dragão pousa sobre um enorme baú dourado.</p><p>Ele bate a pata na tampa, olha para Lucas e Gigi e parece dizer: <em>“Chegaram até aqui juntos. Agora descubram o que sempre esteve no centro desta aventura.”</em></p></div>
+            <div className={`treasure-chest ${finalChestOpen?"chest-open":""}`} onClick={()=>{setFinalChestOpen(true);chime(980,.6)}}><div className="chest-lid">✨</div><div className="chest-body">💎</div></div>
+            {!finalChestOpen && <button className="forest-finish" onClick={()=>{setFinalChestOpen(true);chime(980,.6)}}>Abrir o baú</button>}
+            {finalChestOpen && <motion.div className="magic-scroll" initial={{scale:0,rotate:-8,opacity:0}} animate={{scale:1,rotate:0,opacity:1}} onClick={()=>setFinalLetterOpen(true)}><span>📜</span><b>Clique no pergaminho</b></motion.div>}
+            {finalLetterOpen && <motion.div className="final-letter" initial={{y:40,opacity:0}} animate={{y:0,opacity:1}}><h3>Oi, Baby ❤️</h3><p>Espero que tenha gostado do joguinho/RPG. Eu tentei fazer cada fase lembrando um pedacinho da nossa história.</p><p><b>Feliz aniversário! Te amo e obrigada por tudo.</b></p><p>Agora fale as palavras mágicas:</p><div className="magic-words">“Camarazinho e Tilapinha”</div><p>…e o seu presente será entregue. 🎁</p><p className="signature">Com amor, Giselle.</p></motion.div>}
           </motion.article></motion.div>
         )}
 
@@ -841,7 +895,7 @@ export default function Game() {
             <motion.article className="dice-panel" initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
               <button className="close" onClick={() => setShowDice(false)}>×</button>
               <small>AS PROVAÇÕES DA AVENTURA</small><h2>Dado do Destino</h2>
-              <p>{diceContext === "reflex" ? "Um dos jogadores foi atingido no Teste de Reflexos. Role a prenda e cumpra-a pessoalmente antes de continuar." : diceContext === "road" ? "A tempestade venceu esta tentativa. Cumpram a prenda para poder tentar a estrada novamente." : "Nem toda batalha se vence com espada. Lance o D6 e aceite o que o destino escolher."}</p>
+              <p>{diceContext === "reflex" ? "Um dos jogadores foi atingido no Teste de Reflexos. Role a prenda e cumpra-a pessoalmente antes de continuar." : diceContext === "road" ? "A tempestade venceu esta tentativa. Cumpram a prenda para poder tentar a estrada novamente." : diceContext === "arena" ? "O goleiro defendeu o chute. Role uma prenda, cumpra-a pessoalmente e depois continuem a partida." : diceContext === "castle" ? "O portão resistiu. Role a prenda, cumpra-a e depois tentem novamente." : "Nem toda batalha se vence com espada. Lance o D6 e aceite o que o destino escolher."}</p>
               <div className={`dice3d ${rolling ? "rolling" : ""}`}><div className="dice-face">{dice}</div></div>
               <button className="roll-button" onClick={rollDice} disabled={rolling}>{rolling ? "O destino está girando..." : "Lançar o dado"}</button>
               {!rolling && <div className="penalty"><b>Resultado {dice}</b><span>{[
