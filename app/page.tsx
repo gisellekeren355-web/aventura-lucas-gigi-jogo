@@ -67,6 +67,11 @@ export default function Game() {
   const [dragonPersonality, setDragonPersonality] = useState("");
   const [dragonName, setDragonName] = useState("");
   const [forestMessage, setForestMessage] = useState("");
+  const [pirateMethod, setPirateMethod] = useState("");
+  const [pirateRolls, setPirateRolls] = useState<number[]>([]);
+  const [bridgeRolls, setBridgeRolls] = useState<number[]>([]);
+  const [parrotAnswer, setParrotAnswer] = useState("");
+  const [pirateMessage, setPirateMessage] = useState("");
   const [state, setState] = useGameState();
   const audioRef = useRef<AudioContext | null>(null);
 
@@ -137,6 +142,37 @@ export default function Game() {
         unlocked: Math.max(prev.unlocked, 3),
         completed: prev.completed.includes(2) ? prev.completed : [...prev.completed, 2],
         inventory: prev.inventory.includes(dragonItem) ? prev.inventory : [...prev.inventory, dragonItem, "Guardião da Floresta"]
+      };
+    });
+  }
+
+  function rollPirateDie(target: "chest" | "bridge") {
+    const result = 1 + Math.floor(Math.random() * 6);
+    chime(result >= 5 ? 700 : result >= 3 ? 480 : 180, .3);
+    if (target === "chest") setPirateRolls(prev => [...prev.slice(-1), result]);
+    else setBridgeRolls(prev => [...prev.slice(-1), result]);
+  }
+
+  function finishPirates() {
+    if (!pirateMethod || pirateRolls.length < 1 || bridgeRolls.length < 2 || !parrotAnswer) {
+      setPirateMessage("Concluam todas as escolhas e rolagens da ilha antes de abrir o tesouro.");
+      chime(160, .3);
+      return;
+    }
+    chime(820, .5);
+    setPirateMessage("Tesouro da ilha encontrado! A Chave Dourada, a Moeda Pirata e o Fragmento do Mapa foram conquistados.");
+    setState(prev => {
+      const first = !prev.completed.includes(3);
+      const xp = prev.xp + (first ? 85 : 0);
+      const rewards = ["Chave Dourada", "Moeda Pirata", "Fragmento do Mapa"];
+      return {
+        ...prev,
+        xp,
+        level: 1 + Math.floor(xp / 100),
+        coins: prev.coins + (first ? 20 : 0),
+        unlocked: Math.max(prev.unlocked, 4),
+        completed: first ? [...prev.completed, 3] : prev.completed,
+        inventory: [...prev.inventory, ...rewards.filter(item => !prev.inventory.includes(item))]
       };
     });
   }
@@ -220,7 +256,6 @@ export default function Game() {
                 <p>Duas pessoas. Duas histórias.<br />Dois caminhos que, até então, seguiam separados.</p>
                 <p>Lucas tinha acabado de sair de um romance complexo e estava desacreditado no amor. Giselle, por outro lado, estava apenas vivendo mais um dia comum, assistindo vídeos e comentando no Instagram.</p>
                 <p>Até que um comentário completamente aleatório chamou sua atenção. A cada comentário, uma nova pergunta surgia: <em>“Quem é essa garota?”</em></p>
-                <p className="date">✦ 03/08/2025 ✦<small>O dia em que nos encontramos pessoalmente pela primeira vez.</small></p>
               </div>
               <div className="elder-hint"><div className="elder">🧙‍♂️</div><div><b>Dica do Ancião da Vila</b><p>“As memórias deste acontecimento estão escondidas em um vídeo caótico...”</p><small>Um grupo de homens fazendo algo tão perigoso quanto engraçado.</small></div></div>
               <div className="question"><h3>Qual foi o primeiro comentário de Giselle que chamou a atenção de Lucas?</h3>
@@ -228,7 +263,12 @@ export default function Game() {
               </div>
               {message && <motion.div className={message.startsWith("Memória") ? "result success" : "result fail"} initial={{ scale: .8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
                 <span>{message}</span>
-                {message.startsWith("Memória") && <button className="continue-button" onClick={continueJourney}>Continuar jornada →</button>}
+                {message.startsWith("Memória") && <div className="memory-reveal">
+                  <p>Depois daquele comentário que chamou a atenção de Lucas, as mensagens deixaram de ser apenas comentários perdidos em um vídeo. Vocês começaram a conversar, descobriram afinidades e, pouco a pouco, a curiosidade virou vontade de se conhecer.</p>
+                  <p className="date">✦ 03/08/2025 ✦<small>O dia em que vocês se encontraram pessoalmente pela primeira vez.</small></p>
+                  <p>Naquele primeiro encontro, a impressão foi quase a mesma vista por ângulos opostos: Giselle achou Lucas muito alto, enquanto Lucas achou Giselle baixinha. E foi assim, entre surpresa, risadas e curiosidade, que a aventura realmente começou.</p>
+                  <button className="continue-button" onClick={continueJourney}>Continuar jornada →</button>
+                </div>}
               </motion.div>}
             </motion.article>
           </motion.div>
@@ -254,6 +294,13 @@ export default function Game() {
                 </div>
               </section>
 
+              <div className="chapter-transition">
+                <span>✦</span>
+                <p>Com as armas escolhidas, vocês deixam o acampamento para trás. A trilha se estreita entre raízes antigas e folhas gigantes. O ar fica mais frio, os pássaros se calam e marcas recentes surgem na lama. Lucas ergue o escudo, Giselle observa o movimento das árvores e, por alguns segundos, a floresta parece prender a respiração.</p>
+                <p>Então, um galho se parte bem perto de vocês.</p>
+                <span>✦</span>
+              </div>
+
               <section className="forest-section raptor-section">
                 <h3>2. O ataque dos raptores</h3>
                 <p>Um galho se quebra. Depois outro. Três raptores surgem entre as árvores e cercam vocês.</p>
@@ -261,6 +308,13 @@ export default function Game() {
                 <h4>3. A força da dupla</h4>
                 <ChoiceGroup title="Como vocês enfrentarão a batalha?" value={forestStrategy} setValue={setForestStrategy} options={["⚔️ Ataque duplo", "🛡️ Ataque e defesa", "🌿 Estratégia", "🏃 Fugir"]} />
               </section>
+
+              <div className="chapter-transition">
+                <span>✦</span>
+                <p>Quando o último rugido desaparece entre as árvores, o silêncio retorna. A batalha deixou marcas no chão, mas também revelou uma passagem escondida atrás de cipós. Seguindo um brilho fraco, vocês encontram uma pequena caverna aquecida por uma luz pulsante.</p>
+                <p>No centro dela, alguma coisa começa a se mover.</p>
+                <span>✦</span>
+              </div>
 
               <section className="forest-section dragon-section">
                 <div className="dragon-birth"><span>🥚</span><span>🐉</span></div>
@@ -278,6 +332,67 @@ export default function Game() {
               {forestMessage && <motion.div className={forestMessage.startsWith("O Guardião") ? "result success" : "result fail"} initial={{ scale: .85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
                 <span>{forestMessage}</span>
                 {forestMessage.startsWith("O Guardião") && <button className="continue-button" onClick={() => { setSelected(null); setForestMessage(""); }}>Seguir para o mapa →</button>}
+              </motion.div>}
+            </motion.article>
+          </motion.div>
+        )}
+
+        {selected === 3 && (
+          <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.article className="parchment pirate-parchment" initial={{ rotateY: 55, scale: .75, opacity: 0 }} animate={{ rotateY: 0, scale: 1, opacity: 1 }} exit={{ scale: .75, opacity: 0 }} transition={{ type: "spring", damping: 18 }}>
+              <button className="close" onClick={() => { setSelected(null); setPirateMessage(""); }}>×</button>
+              <div className="scroll-title pirate-title"><span>🏴‍☠️</span><div><small>CAPÍTULO III</small><h2>A Ilha dos Piratas</h2><p>Coragem, escolhas e destino</p></div><span>🧭</span></div>
+              <div className="story">
+                <p>Após atravessarem a Floresta Jurássica, Lucas, Giselle e o pequeno dragão finalmente chegam ao litoral.</p>
+                <p>Um enorme navio de velas negras se aproxima da praia. Seu capitão desce do convés, observa as armas conquistadas e entrega a vocês um antigo mapa incompleto.</p>
+                <p><em>“Somente aqueles guiados por suas escolhas e pelo destino encontrarão o verdadeiro tesouro.”</em></p>
+              </div>
+
+              <div className="chapter-transition pirate-transition"><span>☠</span><p>O capitão aponta para os destroços de embarcações antigas espalhados pela areia. Entre tábuas quebradas, cordas e moedas enferrujadas, um baú permanece intacto. O primeiro fragmento do mapa pode estar lá dentro — mas a ilha não entrega seus segredos sem um teste.</p><span>☠</span></div>
+
+              <section className="forest-section pirate-section">
+                <h3>1. Praia dos Naufrágios</h3>
+                <ChoiceGroup title="Escolham apenas uma forma de abrir o baú" value={pirateMethod} setValue={setPirateMethod} options={["🪓 Arrombar o baú", "🔐 Decifrar a fechadura", "🔎 Procurar a chave"]} />
+                <div className="pirate-dice-row">
+                  <button onClick={() => rollPirateDie("chest")}>🎲 Rolar o Dado do Destino</button>
+                  <b>{pirateRolls.length ? `Resultado: ${pirateRolls[pirateRolls.length - 1]}` : "Aguardando o destino..."}</b>
+                </div>
+                {pirateRolls.length > 0 && <p className="outcome-text">{pirateRolls.at(-1)! <= 2 ? "Falha: piratas inimigos aparecem entre os destroços." : pirateRolls.at(-1)! <= 4 ? "Sucesso parcial: vocês abrem o baú, mas parte do conteúdo foi danificada." : "Sucesso total: o primeiro fragmento do mapa e uma Moeda Pirata foram encontrados."}</p>}
+              </section>
+
+              <div className="chapter-transition pirate-transition"><span>✦</span><p>Com a primeira pista em mãos, vocês avançam para o interior da ilha. O caminho termina diante de uma ponte antiga suspensa sobre um vale profundo. As tábuas rangem, a corda está desgastada e o pequeno dragão voa de um lado para o outro, claramente desconfiado.</p><span>✦</span></div>
+
+              <section className="forest-section pirate-section">
+                <h3>2. A Ponte da Selva Perdida</h3>
+                <p>Cada aventureiro deverá rolar o dado uma vez.</p>
+                <div className="pirate-dice-row">
+                  <button onClick={() => rollPirateDie("bridge")} disabled={bridgeRolls.length >= 2}>🎲 {bridgeRolls.length === 0 ? "Rolagem de Giselle" : bridgeRolls.length === 1 ? "Rolagem de Lucas" : "Rolagens concluídas"}</button>
+                  <b>{bridgeRolls.length ? bridgeRolls.join(" + ") : "—"}</b>
+                </div>
+                {bridgeRolls.length === 2 && <p className="outcome-text">{bridgeRolls[0] >= 3 && bridgeRolls[1] >= 3 ? "Ambos conseguem 3 ou mais: vocês atravessam em segurança." : bridgeRolls[0] < 3 && bridgeRolls[1] < 3 ? "Ambos falharam: a ponte desmorona e vocês encontram um caminho alternativo." : "Apenas um falhou: o outro aventureiro consegue salvá-lo."}</p>}
+              </section>
+
+              <div className="chapter-transition pirate-transition"><span>🦜</span><p>Do outro lado da mata, um papagaio de chapéu pirata pousa sobre uma placa torta. Ele inclina a cabeça, bate as asas e avisa que a sabedoria abre caminhos. Para revelar a pista final, exige uma resposta que represente tudo o que vocês viveram até aqui.</p><span>🦜</span></div>
+
+              <section className="forest-section pirate-section">
+                <h3>3. O Papagaio Pirata</h3>
+                <ChoiceGroup title="O que é mais importante para encontrar um tesouro?" value={parrotAnswer} setValue={setParrotAnswer} options={["Força", "Sorte", "Trabalho em equipe"]} />
+                {parrotAnswer && <p className="outcome-text">{parrotAnswer === "Trabalho em equipe" ? "O papagaio abre as asas e revela a pista verdadeira: nenhum tesouro é encontrado sozinho." : "O papagaio ri e lembra que a melhor resposta é a que mais combina com a jornada de vocês."}</p>}
+              </section>
+
+              <div className="chapter-transition pirate-transition"><span>🗝️</span><p>As pistas se unem e formam um caminho até uma caverna escondida. No interior, a luz dourada de um enorme baú reflete nas paredes. Ao abri-lo, vocês percebem que cada escolha feita na ilha os trouxe exatamente até ali.</p><span>🗝️</span></div>
+
+              <section className="forest-section pirate-section treasure-section">
+                <h3>4. O Tesouro da Ilha</h3>
+                <p>Dentro do baú estão a Chave Dourada, uma Moeda Pirata e o Fragmento Final do Mapa.</p>
+                <div className="treasure-icons"><span>🗝️</span><span>🪙</span><span>🗺️</span></div>
+                <p><em>“O verdadeiro tesouro não está nesta ilha...”</em></p>
+                <button className="forest-finish" onClick={finishPirates}>Abrir o tesouro da ilha</button>
+              </section>
+
+              {pirateMessage && <motion.div className={pirateMessage.startsWith("Tesouro") ? "result success" : "result fail"} initial={{ scale: .85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+                <span>{pirateMessage}</span>
+                {pirateMessage.startsWith("Tesouro") && <button className="continue-button" onClick={() => { setSelected(null); setPirateMessage(""); }}>Seguir para o mapa →</button>}
               </motion.div>}
             </motion.article>
           </motion.div>
